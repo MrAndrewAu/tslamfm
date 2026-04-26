@@ -1,0 +1,120 @@
+import { useState } from 'react'
+import type { Model } from '../types'
+
+interface Props { model: Model }
+
+function pStars(p: number | null | undefined): string {
+  if (p == null) return ''
+  if (p < 0.001) return '***'
+  if (p < 0.01)  return '**'
+  if (p < 0.05)  return '*'
+  if (p < 0.1)   return '.'
+  return ''
+}
+
+export default function Methodology({ model }: Props) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="panel p-6">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between text-left"
+      >
+        <div>
+          <div className="text-sm font-semibold">Methodology</div>
+          <div className="text-xs muted">
+            Open the details: full coefficient table, factor definitions, event list, what we rejected and why.
+          </div>
+        </div>
+        <span className="text-dim text-xl">{open ? '−' : '+'}</span>
+      </button>
+
+      {open && (
+        <div className="mt-6 space-y-6 text-sm">
+          <section>
+            <h3 className="font-semibold mb-2">The equation</h3>
+            <pre className="mono text-xs bg-ink p-4 rounded border border-line overflow-x-auto">
+{`log(TSLA) = α
+          + β₁·log(QQQ)
+          + β₂·log(DXY)
+          + β₃·log(VIX)
+          + β₄·NVDA_excess
+          + β₅·ARKK_excess
+          + Σ event_dummies
+          + ε`}
+            </pre>
+            <div className="text-xs muted mt-2">
+              <code className="mono">NVDA_excess = log(NVDA) − (a + b·log(QQQ))</code> — the residual of NVDA after regressing on QQQ. Same structure for ARKK_excess. This isolates the rotation component from the market beta. Coefficients fit by OLS on weekly Friday closes from {model.window.start} to {model.window.end} ({model.window.n_weeks} weeks).
+            </div>
+          </section>
+
+          <section>
+            <h3 className="font-semibold mb-2">Coefficients</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs mono">
+                <thead className="text-dim border-b border-line">
+                  <tr>
+                    <th className="text-left py-2 pr-4">Factor</th>
+                    <th className="text-right py-2 px-4">β</th>
+                    <th className="text-right py-2 px-4">p</th>
+                    <th className="text-left py-2 pl-4">sig</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {['Intercept', ...model.factors].map(name => {
+                    const b = model.coefficients[name]
+                    const p = model.p_values[name]
+                    return (
+                      <tr key={name} className="border-b border-line/50">
+                        <td className="py-1.5 pr-4">{name}</td>
+                        <td className="text-right py-1.5 px-4">{b?.toFixed(3) ?? '—'}</td>
+                        <td className="text-right py-1.5 px-4">{p != null ? p.toExponential(1) : '—'}</td>
+                        <td className="py-1.5 pl-4 text-warn">{pStars(p)}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="text-[11px] muted mt-2">
+              Sig: <span className="text-warn">***</span> p&lt;0.001, <span className="text-warn">**</span> p&lt;0.01, <span className="text-warn">*</span> p&lt;0.05, <span className="text-warn">.</span> p&lt;0.10
+            </div>
+          </section>
+
+          <section>
+            <h3 className="font-semibold mb-2">Events (8-week dummies)</h3>
+            <ul className="space-y-1 text-xs">
+              {model.events.map(e => (
+                <li key={e.name} className="flex items-center justify-between border-b border-line/50 py-1">
+                  <span><span className="mono text-dim">{e.start}</span> · {e.label}</span>
+                  <span className="mono text-[11px]">
+                    {e.in_model
+                      ? <>β={e.beta?.toFixed(2)} <span className="text-warn">{pStars(e.p_value)}</span></>
+                      : <span className="muted">excluded</span>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          <section>
+            <h3 className="font-semibold mb-2">What we rejected (and why)</h3>
+            <ul className="space-y-2 text-xs muted list-disc list-inside">
+              <li><span className="text-slate-300">v5 lag-cheat:</span> adding the prior week's TSLA price drove R² to 0.99 — but the model just predicted persistence. A "TSLA next week = TSLA this week" baseline beat it.</li>
+              <li><span className="text-slate-300">EPS:</span> R² = 0.009. Trailing earnings have no measurable weekly relationship with TSLA price.</li>
+              <li><span className="text-slate-300">Vehicle deliveries:</span> p = 0.68 once macro factors are controlled.</li>
+              <li><span className="text-slate-300">Short interest:</span> too smooth a series; no usable signal.</li>
+              <li><span className="text-slate-300">VVIX, SKEW, raw volume:</span> tested in v7/v8; none added meaningful out-of-sample lift.</li>
+              <li><span className="text-slate-300">12-week realized vol (v9):</span> small in-sample lift, but it's computed from TSLA's own returns — flagged as a soft persistence backdoor.</li>
+            </ul>
+          </section>
+
+          <section className="text-xs muted">
+            <h3 className="font-semibold text-slate-300 mb-2">Honest limits</h3>
+            <p>This is a statistical model, not advice. It does not know about: Musk's tweets, robotaxi rollout, Optimus, FSD progress, regulatory action, fraud, brand sentiment, or anything not encoded in QQQ/DXY/VIX/NVDA/ARKK. The OOS correlation is high but the OOS R² is currently negative because actual TSLA is sitting well below model fair value — that gap is the market pricing in things this model can't see. Use accordingly.</p>
+          </section>
+        </div>
+      )}
+    </div>
+  )
+}
