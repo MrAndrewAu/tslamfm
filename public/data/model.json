@@ -1,10 +1,10 @@
 {
-  "version": "v6-canonical",
-  "generated_at": "2026-04-26T10:34:15.210137+00:00",
+  "version": "v6-canonical-4y",
+  "generated_at": "2026-04-26T11:05:00.267176+00:00",
   "window": {
-    "start": "2020-05-01",
+    "start": "2022-04-29",
     "end": "2026-04-24",
-    "n_weeks": 313
+    "n_weeks": 209
   },
   "factors": [
     "log_QQQ",
@@ -12,9 +12,6 @@
     "log_VIX",
     "NVDA_excess",
     "ARKK_excess",
-    "E_Split_squeeze_2020",
-    "E_SP500_inclusion",
-    "E_Hertz_1T_peak",
     "E_Twitter_overhang",
     "E_Twitter_close",
     "E_AI_day_2023",
@@ -25,52 +22,46 @@
     "E_Tariff_shock"
   ],
   "coefficients": {
-    "Intercept": -10.341705304057148,
-    "log_QQQ": 1.1773124141236453,
-    "log_DXY": 1.7630328700400815,
-    "log_VIX": 0.22497178022853787,
-    "NVDA_excess": -1.4411138710420115,
-    "ARKK_excess": -0.47984644442651553,
-    "E_Split_squeeze_2020": 0.14411258072304708,
-    "E_SP500_inclusion": 0.2849834842914858,
-    "E_Hertz_1T_peak": 0.2431603759741315,
-    "E_Twitter_overhang": 0.17984227091371988,
-    "E_Twitter_close": 0.0022635972778060603,
-    "E_AI_day_2023": 0.2614846207669847,
-    "E_Trump_election": 0.27166554329415443,
-    "E_DOGE_brand_damage": -0.018517960700524767,
-    "E_Musk_exits_DOGE": 0.09401342468182325,
-    "E_TrillionPay": 0.09168369309481175,
-    "E_Tariff_shock": -0.14179958270134407
+    "Intercept": -10.24549173320298,
+    "log_QQQ": 1.0081742684805737,
+    "log_DXY": 1.9621220353927011,
+    "log_VIX": 0.20826169714348908,
+    "NVDA_excess": -0.4916141720920062,
+    "ARKK_excess": 0.8134917888222908,
+    "E_Twitter_overhang": 0.051214638249589384,
+    "E_Twitter_close": -0.05097203010927161,
+    "E_AI_day_2023": 0.1942712194488935,
+    "E_Trump_election": 0.225568116403205,
+    "E_DOGE_brand_damage": -0.006495999746982655,
+    "E_Musk_exits_DOGE": 0.13622472978126918,
+    "E_TrillionPay": 0.002336717506231146,
+    "E_Tariff_shock": 0.012052121904943942
   },
   "p_values": {
-    "Intercept": 2.7824018966615682e-06,
+    "Intercept": 6.209859253480943e-07,
     "log_QQQ": 0.0,
-    "log_DXY": 0.0003155012425692938,
-    "log_VIX": 2.347907060551435e-05,
-    "NVDA_excess": 0.0,
-    "ARKK_excess": 1.671125924307404e-07,
-    "E_Split_squeeze_2020": 0.04023052828424811,
-    "E_SP500_inclusion": 4.80508500209087e-05,
-    "E_Hertz_1T_peak": 0.00034996077227367195,
-    "E_Twitter_overhang": 0.009920531411841127,
-    "E_Twitter_close": 0.9737518991767378,
-    "E_AI_day_2023": 0.00010900380900413786,
-    "E_Trump_election": 0.0001812031465564523,
-    "E_DOGE_brand_damage": 0.7914513670044103,
-    "E_Musk_exits_DOGE": 0.17479528274497635,
-    "E_TrillionPay": 0.18548699924278989,
-    "E_Tariff_shock": 0.05799663594325799
+    "log_DXY": 1.0599439683733891e-06,
+    "log_VIX": 1.1125682960244632e-05,
+    "NVDA_excess": 1.264773422882115e-06,
+    "ARKK_excess": 2.0016560187130494e-08,
+    "E_Twitter_overhang": 0.3318005247492968,
+    "E_Twitter_close": 0.3018898461626891,
+    "E_AI_day_2023": 6.589785610344734e-05,
+    "E_Trump_election": 2.1589363366825154e-05,
+    "E_DOGE_brand_damage": 0.9002565021759836,
+    "E_Musk_exits_DOGE": 0.0068122346901138275,
+    "E_TrillionPay": 0.9647387544987389,
+    "E_Tariff_shock": 0.8271801056583898
   },
   "residualizations": {
     "NVDA_excess": {
-      "intercept": -17.128849730119637,
-      "beta_log_QQQ": 3.511955856894029,
+      "intercept": -15.52941544061612,
+      "beta_log_QQQ": 3.2662298786378288,
       "source": "log(NVDA)"
     },
     "ARKK_excess": {
-      "intercept": 3.598931124552862,
-      "beta_log_QQQ": 0.08934014581672078,
+      "intercept": -1.2146958441859268,
+      "beta_log_QQQ": 0.8500565025428845,
       "source": "log(ARKK)"
     }
   },
@@ -80,27 +71,27 @@
       "start": "2020-08-11",
       "label": "5-for-1 split squeeze",
       "weeks": 8,
-      "in_model": true,
-      "beta": 0.14411258072304708,
-      "p_value": 0.04023052828424811
+      "in_model": false,
+      "beta": null,
+      "p_value": null
     },
     {
       "name": "SP500_inclusion",
       "start": "2020-11-16",
       "label": "S&P 500 inclusion announcement",
       "weeks": 8,
-      "in_model": true,
-      "beta": 0.2849834842914858,
-      "p_value": 4.80508500209087e-05
+      "in_model": false,
+      "beta": null,
+      "p_value": null
     },
     {
       "name": "Hertz_1T_peak",
       "start": "2021-10-25",
       "label": "Hertz order, $1T cap peak",
       "weeks": 8,
-      "in_model": true,
-      "beta": 0.2431603759741315,
-      "p_value": 0.00034996077227367195
+      "in_model": false,
+      "beta": null,
+      "p_value": null
     },
     {
       "name": "Twitter_overhang",
@@ -108,8 +99,8 @@
       "label": "Twitter bid overhang",
       "weeks": 8,
       "in_model": true,
-      "beta": 0.17984227091371988,
-      "p_value": 0.009920531411841127
+      "beta": 0.051214638249589384,
+      "p_value": 0.3318005247492968
     },
     {
       "name": "Twitter_close",
@@ -117,8 +108,8 @@
       "label": "Twitter acquisition close",
       "weeks": 8,
       "in_model": true,
-      "beta": 0.0022635972778060603,
-      "p_value": 0.9737518991767378
+      "beta": -0.05097203010927161,
+      "p_value": 0.3018898461626891
     },
     {
       "name": "AI_day_2023",
@@ -126,8 +117,8 @@
       "label": "AI Day 2 / Dojo narrative",
       "weeks": 8,
       "in_model": true,
-      "beta": 0.2614846207669847,
-      "p_value": 0.00010900380900413786
+      "beta": 0.1942712194488935,
+      "p_value": 6.589785610344734e-05
     },
     {
       "name": "Trump_election",
@@ -135,8 +126,8 @@
       "label": "Trump election rally",
       "weeks": 8,
       "in_model": true,
-      "beta": 0.27166554329415443,
-      "p_value": 0.0001812031465564523
+      "beta": 0.225568116403205,
+      "p_value": 2.1589363366825154e-05
     },
     {
       "name": "DOGE_brand_damage",
@@ -144,8 +135,8 @@
       "label": "DOGE brand damage",
       "weeks": 8,
       "in_model": true,
-      "beta": -0.018517960700524767,
-      "p_value": 0.7914513670044103
+      "beta": -0.006495999746982655,
+      "p_value": 0.9002565021759836
     },
     {
       "name": "Musk_exits_DOGE",
@@ -153,8 +144,8 @@
       "label": "Musk exits DOGE",
       "weeks": 8,
       "in_model": true,
-      "beta": 0.09401342468182325,
-      "p_value": 0.17479528274497635
+      "beta": 0.13622472978126918,
+      "p_value": 0.0068122346901138275
     },
     {
       "name": "TrillionPay",
@@ -162,8 +153,8 @@
       "label": "$1T Musk pay package",
       "weeks": 8,
       "in_model": true,
-      "beta": 0.09168369309481175,
-      "p_value": 0.18548699924278989
+      "beta": 0.002336717506231146,
+      "p_value": 0.9647387544987389
     },
     {
       "name": "Tariff_shock",
@@ -171,18 +162,18 @@
       "label": "Tariff shock",
       "weeks": 8,
       "in_model": true,
-      "beta": -0.14179958270134407,
-      "p_value": 0.05799663594325799
+      "beta": 0.012052121904943942,
+      "p_value": 0.8271801056583898
     }
   ],
   "stats": {
-    "r2_in": 0.8252301786491139,
-    "mae_in_pct": 13.311020670591562,
-    "sigma_resid_log": 0.1799101734115995,
+    "r2_in": 0.8533440428932264,
+    "mae_in_pct": 8.970348349061235,
+    "sigma_resid_log": 0.12728465936022526,
     "oos": {
-      "r2": -0.19563626121041122,
-      "mae_pct": 12.417923763505598,
-      "corr": 0.7790649455603432,
+      "r2": 0.6615967293244878,
+      "mae_pct": 7.706558971499583,
+      "corr": 0.8362787908899196,
       "start": "2025-01-03",
       "n": 69
     }
@@ -190,19 +181,16 @@
   "current": {
     "date": "2026-04-24",
     "tsla_actual": 376.2999877929687,
-    "tsla_fair": 660.9307050721925,
-    "gap_pct": -43.065137554493546,
-    "sigma_low": 552.1053212639467,
-    "sigma_high": 791.2066413473111,
+    "tsla_fair": 454.95146703952605,
+    "gap_pct": -17.287883421579153,
+    "sigma_low": 400.57703218637397,
+    "sigma_high": 516.7067024080309,
     "factors_now": {
       "log_QQQ": 6.49810141760748,
       "log_DXY": 4.590158087553005,
       "log_VIX": 2.9290580913534825,
-      "NVDA_excess": -0.3533602667733744,
-      "ARKK_excess": 0.15781828809873577,
-      "E_Split_squeeze_2020": 0.0,
-      "E_SP500_inclusion": 0.0,
-      "E_Hertz_1T_peak": 0.0,
+      "NVDA_excess": -0.35604222862729085,
+      "ARKK_excess": 0.028233220798043135,
       "E_Twitter_overhang": 0.0,
       "E_Twitter_close": 0.0,
       "E_AI_day_2023": 0.0,
@@ -213,13 +201,13 @@
       "E_Tariff_shock": 0.0
     },
     "contribution_dollars": {
-      "QQQ": 660.6161658401045,
-      "DXY": 660.7285965699867,
-      "VIX": 318.970767815902,
-      "NVDA_rotation": 263.73996497254376,
-      "ARKK_rotation": -51.99523581046685,
+      "QQQ": 454.301626256829,
+      "DXY": 454.89568255939366,
+      "VIX": 207.75581458337095,
+      "NVDA_rotation": 73.05278546043121,
+      "ARKK_rotation": 10.330013418980059,
       "events": 0.0,
-      "baseline": -1191.1295543158778
+      "baseline": -745.3844552394787
     },
     "active_events": [],
     "underlyings": {

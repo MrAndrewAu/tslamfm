@@ -18,7 +18,7 @@ warnings.filterwarnings("ignore")
 OUT_DIR = Path(__file__).resolve().parents[1] / "public" / "data"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-START, END = "2020-04-26", "2026-04-26"
+START, END = "2022-04-26", "2026-04-26"
 
 def wk(sym):
     s = yf.Ticker(sym).history(start=START, end=END, interval="1wk")["Close"]
@@ -76,8 +76,16 @@ for name, dt, _ in EVENT_DEFS:
 
 f = f.dropna()
 
+# Drop event dummies that are constant (all-zero) on this window
+def has_variation(col):
+    v = f[col]
+    return v.nunique() > 1
+
+active_event_names = [n for n, _, _ in EVENT_DEFS if has_variation(f"E_{n}")]
+print(f"  events with variation in window: {len(active_event_names)} / {len(EVENT_DEFS)}")
+
 FORCED = ["log_QQQ", "log_DXY", "log_VIX", "NVDA_excess", "ARKK_excess"]
-ALL_EVENTS = [f"E_{n}" for n, _, _ in EVENT_DEFS]
+ALL_EVENTS = [f"E_{n}" for n in active_event_names]
 
 def fit(frame, factors):
     y = frame["log_TSLA"].to_numpy()
@@ -186,7 +194,7 @@ for name, dt, label in EVENT_DEFS:
         active_events.append({"name": name, "start": dt, "label": label})
 
 model_obj = {
-    "version": "v6-canonical",
+    "version": "v6-canonical-4y",
     "generated_at": pd.Timestamp.utcnow().isoformat(),
     "window": {
         "start": str(f.index[0].date()),

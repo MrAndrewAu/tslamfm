@@ -54,7 +54,7 @@ export default function FactorBars({ contributions, fair, underlyings }: Props) 
         <div className="grid grid-cols-12 gap-3 items-center text-sm pt-3 border-t border-line">
           <div className="col-span-4 font-semibold">Model total</div>
           <div className="col-span-6" />
-          <div className="col-span-2 text-right mono font-semibold text-accent">{fmtUSD(fair, 0)}</div>
+          <div className="col-span-2 text-right mono font-semibold" style={{ color: '#3b82f6' }}>{fmtUSD(fair, 0)}</div>
         </div>
       </div>
 

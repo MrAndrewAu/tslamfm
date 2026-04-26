@@ -32,6 +32,10 @@ export default function Gauge({ actual, fair, low, high, asOf, isLive }: Props) 
   const xMax = high + pad
   const pct = (v: number) => Math.max(0, Math.min(100, ((v - xMin) / (xMax - xMin)) * 100))
 
+  // Fair value renders in a neutral blue (the model's "voice").
+  // The valuation signal (under/over) is carried by the gap % below.
+  const fairColor = '#3b82f6'
+
   return (
     <div className="panel p-6 md:p-8">
       <div className="flex items-baseline justify-between mb-4">
@@ -49,7 +53,7 @@ export default function Gauge({ actual, fair, low, high, asOf, isLive }: Props) 
         </div>
         <div className="text-right">
           <div className="text-xs muted uppercase tracking-wider">Model fair value</div>
-          <div className="text-4xl md:text-5xl mono font-semibold mt-1 text-accent">{fmtUSD(fair)}</div>
+          <div className="text-4xl md:text-5xl mono font-semibold mt-1" style={{ color: fairColor }}>{fmtUSD(fair)}</div>
           <div className="text-[11px] muted mt-1 mono">
             ±1σ band {fmtUSD(low, 0)} – {fmtUSD(high, 0)}
           </div>
@@ -57,7 +61,7 @@ export default function Gauge({ actual, fair, low, high, asOf, isLive }: Props) 
       </div>
 
       {/* Gauge bar */}
-      <div className="relative h-16">
+      <div className="relative h-20">
         {/* Band */}
         <div
           className="absolute top-1/2 -translate-y-1/2 h-3 rounded-full bg-accent/15 border border-accent/30"
@@ -65,9 +69,21 @@ export default function Gauge({ actual, fair, low, high, asOf, isLive }: Props) 
         />
         {/* Centerline */}
         <div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-px bg-line" />
+        {/* Lower bound tick + label */}
+        <div className="absolute top-1/2 -translate-y-1/2" style={{ left: `${pct(low)}%` }}>
+          <div className="-translate-x-1/2 w-px h-3 bg-accent/60" />
+          <div className="absolute -top-5 -translate-x-1/2 text-[10px] muted whitespace-nowrap mono">{fmtUSD(low, 0)}</div>
+          <div className="absolute top-4 -translate-x-1/2 text-[10px] muted whitespace-nowrap">−1σ</div>
+        </div>
+        {/* Upper bound tick + label */}
+        <div className="absolute top-1/2 -translate-y-1/2" style={{ left: `${pct(high)}%` }}>
+          <div className="-translate-x-1/2 w-px h-3 bg-accent/60" />
+          <div className="absolute -top-5 -translate-x-1/2 text-[10px] muted whitespace-nowrap mono">{fmtUSD(high, 0)}</div>
+          <div className="absolute top-4 -translate-x-1/2 text-[10px] muted whitespace-nowrap">+1σ</div>
+        </div>
         {/* Fair marker */}
         <div className="absolute top-1/2 -translate-y-1/2" style={{ left: `${pct(fair)}%` }}>
-          <div className="-translate-x-1/2 w-4 h-4 rounded-full bg-accent border-2 border-ink" />
+          <div className="-translate-x-1/2 w-4 h-4 rounded-full border-2 border-ink" style={{ background: fairColor }} />
           <div className="absolute top-6 -translate-x-1/2 text-[11px] muted whitespace-nowrap">fair</div>
         </div>
         {/* Actual marker */}

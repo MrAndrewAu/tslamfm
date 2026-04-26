@@ -34,7 +34,7 @@ export default function App() {
       if (!cancelled && q) setLive(q)
     }
     tick()
-    const id = setInterval(tick, 60_000)
+    const id = setInterval(tick, 300_000)
     return () => { cancelled = true; clearInterval(id) }
   }, [])
 
