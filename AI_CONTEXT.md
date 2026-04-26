@@ -198,4 +198,203 @@ npm run build                           # verify dist/ builds
 - (Optional) Add interactive Recharts `<Legend>` to `HistoryChart` if user finds the static legend insufficient.
 - (Optional) Formalize the Lambda deployment in SAM or CDK so it lives in the repo.
 - Validate Amplify deploy + custom domain `tslamfm.com` end-to-end.
-- Paid options data (ORATS $99/mo or Polygon $79/mo) was researched but **not** integrated. Ignore unless user revives the topic.
+
+## 10. Factor expansion attempts — TESTED AND REJECTED (April 2026)
+
+**Bottom line:** options data, raw volume, and FINRA microstructure all
+investigated for a v7. **All rejected.** v6-canonical-4y remains production.
+v6's OOS R^2 = 0.66 appears to be close to what's achievable with weekly
+Friday data and public macro inputs.
+
+### 10.1 Options data (marketdata.app) — REJECTED
+
+**Vendor:** marketdata.app Starter ($12/mo annual / $30/mo monthly).
+Picked over Theta Data Value/Standard ($40-80/mo) and ORATS ($99/mo+) for
+price + REST API simplicity. Account currently on free Trial tier (1 year of
+history only).
+
+**Files:** `scripts/fetch_marketdata_options.py`, `scripts/analyze_options_signal.py`.
+Output: `public/data/options_features.csv` (50 weekly rows, 2025-05-02 → 2026-04-24).
+
+**Critical Starter-tier limitation (verified):** historical chain endpoint
+returns IV / delta / gamma / theta / vega columns with **all values null**.
+Only the current-snapshot endpoint populates Greeks. NOT documented on the
+pricing page. The Trader tier ($30/mo annual / $75/mo monthly) MIGHT fix
+this — OPRA entitlement is gated to Trader+ — but the docs do not explicitly
+confirm historical Greeks are populated. **Do not pay for Trader without
+verification (support email or trial test first).**
+
+What works on Starter historically: bid, ask, mid, strike, expiration, dte,
+openInterest, volume → enables `pc_oi_ratio` and `pc_vol_ratio` only.
+
+**Test results (n=50 weekly observations):**
+| factor | corr_t | p | corr_t+1 | p | verdict |
+|---|---|---|---|---|---|
+| pc_oi_ratio | -0.20 | 0.16 | -0.18 | 0.22 | REJECT |
+| pc_vol_ratio | -0.36 | 0.010 | -0.25 | 0.086 | WEAK |
+| iv_atm_30d / skew_25d / term_slope | — | — | — | — | n/a (Starter) |
+
+`pc_vol_ratio` is **borderline** — significant contemporaneous, weak lagged.
+At n=50 with corr ≈ −0.25 the t-stat is right at the edge (p=0.086 fails the
+project's pre-set p<0.05 bar). Insufficient evidence to integrate.
+
+**API behavioral notes (verified):**
+- Status 200 = fresh data; 203 = cached/delayed but VALID (has `s:"ok"` body) —
+  do NOT treat 203 as an error.
+- Status 404 with body `{"s":"no_data"}` = market holiday. Skip silently.
+- Status 402 "Free/Trial users can only access up to 1 year of data" =
+  upgrade to Starter/Trader for older data.
+- Historical chain queries: 1 credit per 1000 contracts. TSLA full Friday
+  chain ~3-5k contracts. Full 4yr backfill on Starter ≈ 1k credits (well
+  under 10k daily cap).
+
+### 10.2 TSLA traded volume — REJECTED
+
+**File:** `scripts/analyze_volume_signal.py` (yfinance source, no fetch needed).
+
+Tested three transforms across full 4-year sample (n=209):
+| factor | corr_t | corr_t+1 | verdict |
+|---|---|---|---|
+| log_volume | +0.005 | +0.033 | REJECT |
+| volume_zscore_52w | +0.021 | +0.041 | REJECT |
+| volume_excess (vs QQQ vol) | +0.004 | +0.035 | REJECT |
+
+Lagged correlation essentially zero in all variants. Well-powered null result
+(n=209, full market cycle). Volume is largely a *consequence* of moves the
+QQQ/NVDA factors already explain. More data won't change this.
+
+### 10.3 FINRA microstructure (off-exchange + short volume) — REJECTED
+
+**Files:**
+- `scripts/fetch_finra_volume.py` — pulls daily CNMSshvol files from
+  `https://cdn.finra.org/equity/regsho/daily/CNMSshvol{YYYYMMDD}.txt`.
+  Free, no auth, pipe-delimited. 1003 daily rows captured (4yr).
+  HTTP 403 on holidays = expected, skip silently.
+- `scripts/analyze_microstructure_signal.py` — tests 5 derived factors.
+- `scripts/build_model_data_v7.py` — branch from v6 wiring two factors in.
+
+**Candidate-test results (n=190-209):**
+| factor | corr_t+1 | p | verdict on full sample |
+|---|---|---|---|
+| short_ratio | +0.18 | 0.011 | PROMISING |
+| short_ratio_zscore | +0.17 | 0.024 | PROMISING |
+| off_exch_ratio | +0.05 | 0.46 | REJECT |
+| off_exch_ratio_zscore | +0.23 | 0.002 | PROMISING |
+| up_down_vol_4w | +0.31 | <0.001 | PROMISING |
+
+Looked great. **But OOS-period sub-correlation flipped sign or shrank to
+noise** for every PROMISING factor — strong hint of regime dependence
+(2022-2024 only). Walk-forward confirmed:
+
+| Variant | n | In-sample R² | OOS R² | Δ vs v6 |
+|---|---|---|---|---|
+| **v6 baseline** | 209 | 0.853 | **0.662** | — |
+| v7 + both factors | 190 | 0.891 | 0.492 | **−17.0pp** |
+| v7 + up_down only | 208 | 0.871 | 0.620 | **−4.2pp** |
+| v7 + off_exch only | 190 | 0.876 | **0.360** | **−30.2pp** |
+
+Textbook overfitting signature: in-sample R² up, OOS R² collapsed.
+**`off_exch_ratio_zscore` is catastrophically destructive** — OOS R² halved.
+The "whales accumulating off-exchange" narrative the X crowd peddles is not
+detectable in our weekly fair-value model on TSLA.
+
+### 10.4 Honest conclusions
+
+1. **The v6-canonical-4y residual is mostly noise plus event-driven jumps.**
+   Microstructure factors that explain *contemporaneous* residuals don't
+   *predict* future residuals out of sample.
+2. **Walk-forward OOS testing is the only honest gate.** Lagged-correlation
+   PROMISING verdicts on the full sample misled here — OOS-period sub-
+   correlation deserves equal weight in the verdict logic.
+3. **The "factor analyzer" output should be treated as a candidate-screen,
+   not a green light.** Always run the walk-forward build before integrating.
+4. **Don't re-litigate.** Volume / options PC ratios / FINRA short & off-exch
+   are all answered. Update this doc instead of re-running them, unless TSLA's
+   regime materially shifts.
+
+### 10.5 Plausible next directions (not yet tried)
+
+If pursuing further factor expansion, these are more promising than more
+microstructure:
+- **Adaptive sigma band** — let the ±1σ band breathe with realized volatility
+  instead of being flat. Pure UX win, no fair-value change. Microstructure
+  factors might earn their keep here as a *volatility* model even though they
+  failed as a *level* model.
+- **Earnings-cycle / fundamentals features** — earnings revisions, delivery
+  beats/misses, FSD milestones. Fundamental rather than microstructure.
+- **Higher frequency** — daily instead of weekly. Microstructure typically
+  shines at higher frequency; weekly Friday closes wash it out.
+- **Time-varying coefficients** — let beta_QQQ, beta_NVDA etc. drift over
+  time (rolling-window or Bayesian state-space). Could handle the regime
+  shifts that broke the static microstructure factors.
+
+### 10.6 Test scripts kept (DO NOT delete)
+
+All factor-test scripts remain in `scripts/` as documented evidence and for
+re-testing if regimes change:
+- `fetch_marketdata_options.py`
+- `analyze_options_signal.py`
+- `analyze_volume_signal.py`
+- `fetch_finra_volume.py`
+- `analyze_microstructure_signal.py`
+- `analyze_crypto_signal.py`
+- `build_model_data_v7.py` (header notes the rejection)
+- `build_model_data_v7crypto.py` (header notes the rejection)
+
+Output CSVs:
+- `public/data/options_features.csv` (50 rows, Trial-tier window)
+- `public/data/finra_volume.csv` (1003 rows, full 4yr)
+
+**Token handling (security-critical):** `MARKETDATA_TOKEN` lives ONLY in
+`$env:MARKETDATA_TOKEN`. `.env` and `*.token` are already in `.gitignore`.
+The fetch script refuses to run without the env var set.
+
+### 10.7 Crypto factors (BTC, ETH) — REJECTED (re-tested April 2026)
+
+**Files:** `scripts/analyze_crypto_signal.py`, `scripts/build_model_data_v7crypto.py`.
+
+**Candidate-test results (n=190-209, full 4yr sample):**
+| factor | corr_t+1 | p | OOS sub-period corr | verdict |
+|---|---|---|---|---|
+| log_BTC-USD | -0.06 | 0.36 | -0.01 | REJECT |
+| BTC-USD_excess_vs_QQQ | -0.20 | 0.005 | +0.14 (p=0.24) | PROMISING |
+| BTC-USD_zscore_52w | -0.07 | 0.37 | +0.08 | REJECT |
+| log_ETH-USD | -0.13 | 0.055 | +0.02 | WEAK |
+| ETH-USD_excess_vs_QQQ | -0.22 | 0.002 | +0.09 (p=0.45) | PROMISING |
+| ETH-USD_zscore_52w | -0.21 | 0.005 | -0.01 | PROMISING |
+
+The OQ-QQQ-residualized variants again looked PROMISING on the full sample
+but **OOS-period sub-correlation insignificant or sign-flipped** — same
+warning we now recognize from microstructure.
+
+**Walk-forward results (BTC_excess and ETH_excess, separately):**
+| Variant | n | In-sample R² | OOS R² | OOS MAE | Δ vs v6 |
+|---|---|---|---|---|---|
+| **v6 baseline** | 209 | 0.853 | **0.662** | 7.71% | — |
+| v7 + BTC_excess | 209 | 0.874 | 0.349 | 10.84% | **−31.3pp** |
+| v7 + ETH_excess | 209 | 0.878 | 0.574 | 9.12% | **−8.8pp** |
+
+BTC_excess catastrophically destructive (matches `off_exch_ratio_zscore`
+behavior). ETH_excess merely bad. Both rejected.
+
+Plausible economic story (negative correlation): when crypto outperforms
+tech, retail risk appetite rotates away from speculative equities like TSLA.
+True in 2022-2024. Did not hold in 2025-2026.
+
+**Important meta-finding:** This is the **third independent confirmation**
+of the same pattern (after microstructure 10.3 and the older v5 BTC test
+mentioned in §5). Treat any future "PROMISING" verdict whose OOS-period
+sub-correlation is insignificant or sign-flipped as REJECT-candidate by
+default. The full-sample lagged correlation is misleading when the
+underlying relationship is regime-dependent.
+
+## 11. Other open items
+
+- (Optional) Add interactive Recharts `<Legend>` to `HistoryChart` if user finds
+  the static legend insufficient.
+- (Optional) Formalize the Lambda deployment in SAM or CDK so it lives in the repo.
+- Validate Amplify deploy + custom domain `tslamfm.com` end-to-end.
+- (Optional) Migrate equity closes (TSLA / NVDA / QQQ / ARKK) from yfinance to
+  marketdata.app for cleaner split adjustments and survivorship; keep DXY on
+  yfinance (marketdata.app doesn't carry the ICE dollar index). Pure plumbing
+  change, no R^2 impact expected. Defer until after the options-factor decision.

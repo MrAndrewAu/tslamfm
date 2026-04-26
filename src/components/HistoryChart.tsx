@@ -93,8 +93,8 @@ export default function HistoryChart({ history, model }: Props) {
             <ComposedChart data={data} margin={{ top: 10, right: 16, bottom: 0, left: 0 }}>
               <defs>
                 <linearGradient id="bandFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%"  stopColor="#3b82f6" stopOpacity={0.18} />
-                  <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.04} />
+                  <stop offset="0%"  stopColor="#3b82f6" stopOpacity={0.35} />
+                  <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.12} />
                 </linearGradient>
               </defs>
               <CartesianGrid stroke="#1f2632" strokeDasharray="2 2" />
@@ -106,8 +106,8 @@ export default function HistoryChart({ history, model }: Props) {
                 labelStyle={{ color: '#7c869a', marginBottom: 4 }}
               />
               {/* Band: high (top) and low (bottom). Stack-style fill via two areas. */}
-              <Area type="monotone" dataKey="high" stroke="none" fill="url(#bandFill)" />
-              <Area type="monotone" dataKey="low"  stroke="none" fill="#0b0e14" />
+              <Area type="monotone" dataKey="high" stroke="#3b82f6" strokeWidth={1} strokeDasharray="4 3" strokeOpacity={0.5} fill="url(#bandFill)" />
+              <Area type="monotone" dataKey="low"  stroke="#3b82f6" strokeWidth={1} strokeDasharray="4 3" strokeOpacity={0.5} fill="#0b0e14" />
               <Line type="monotone" dataKey="fitted" stroke="#3b82f6" strokeWidth={2} dot={false} name="fair value" />
               <Line type="monotone" dataKey="actual" stroke="#e2e8f0" strokeWidth={1.5} dot={false} name="actual" />
               {eventLines.map(e => (
