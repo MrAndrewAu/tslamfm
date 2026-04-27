@@ -3,7 +3,6 @@ import type { Model, HistoryRow, LiveQuotes } from './types'
 import { computeFairValue } from './lib/model'
 import { fetchLiveQuotes } from './lib/yahoo'
 import Header from './components/Header'
-import Gauge from './components/Gauge'
 import HistoryChart from './components/HistoryChart'
 import FactorBars from './components/FactorBars'
 import ModelStats from './components/ModelStats'
@@ -58,13 +57,19 @@ export default function App() {
     // Use the latest adaptive sigma_t for live bands; fall back to constant
     // residual sigma for older model.json files.
     const sigmaForBands = model.stats.sigma_t_latest ?? model.stats.sigma_resid_log
+    // Empirical 10/90th-percentile offsets, scaled by sigma_t / sigma_IS so
+    // live bands track the current vol regime (matches per-row history scaling).
+    const q10 = model.stats.q10_log
+    const q90 = model.stats.q90_log
+    const sigmaIS = model.stats.sigma_IS_log ?? model.stats.sigma_resid_log
+    const qScale = (model.stats.sigma_t_latest ?? sigmaIS) / Math.max(sigmaIS, 1e-8)
     if (live) {
       const r = computeFairValue(model, live)
       return {
         actual: live.TSLA,
         fair:   r.fair,
-        low:    r.fair * Math.exp(-sigmaForBands),
-        high:   r.fair * Math.exp( sigmaForBands),
+        low:    q10 != null ? r.fair * Math.exp(q10 * qScale) : r.fair * Math.exp(-sigmaForBands),
+        high:   q90 != null ? r.fair * Math.exp(q90 * qScale) : r.fair * Math.exp( sigmaForBands),
         contributions: r.contribution_dollars,
         underlyings: {
           TSLA: live.TSLA, QQQ: live.QQQ, DXY: live.DXY,
@@ -82,8 +87,8 @@ export default function App() {
     return {
       actual: model.current.tsla_actual,
       fair:   model.current.tsla_fair,
-      low:    model.current.sigma_low,
-      high:   model.current.sigma_high,
+      low:    model.current.q_low  ?? model.current.sigma_low,
+      high:   model.current.q_high ?? model.current.sigma_high,
       contributions: model.current.contribution_dollars,
       underlyings: model.current.underlyings,
       asOf: model.current.date,
@@ -96,13 +101,17 @@ export default function App() {
       <Header modelVersion={model.version} generatedAt={model.generated_at} />
 
       <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-8 space-y-6">
-        <Gauge
-          actual={snapshot.actual}
-          fair={snapshot.fair}
-          low={snapshot.low}
-          high={snapshot.high}
-          asOf={snapshot.asOf}
-          isLive={snapshot.isLive}
+        <HistoryChart
+          history={history}
+          model={model}
+          snapshot={{
+            actual: snapshot.actual,
+            fair: snapshot.fair,
+            low: snapshot.low,
+            high: snapshot.high,
+            asOf: snapshot.asOf,
+            isLive: snapshot.isLive,
+          }}
         />
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -113,8 +122,6 @@ export default function App() {
           />
           <ModelStats stats={model.stats} nWeeks={model.window.n_weeks} />
         </div>
-
-        <HistoryChart history={history} model={model} />
 
         {model.current.active_events.length > 0 && (
           <div className="panel p-6">

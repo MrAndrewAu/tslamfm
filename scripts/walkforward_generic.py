@@ -49,11 +49,13 @@ if len(sys.argv) < 3:
 sym, transform = sys.argv[1], sys.argv[2]
 factor_name = f"{sym}_{transform}"
 
-print(f"Walk-forward: v6 vs v6 + {factor_name}")
+print(f"Walk-forward: v6.3 vs v6.3 + {factor_name}")
 print("Fetching weekly closes...")
 S = {k: wk(v) for k, v in {
     "TSLA": "TSLA", "QQQ": "QQQ", "DXY": "DX-Y.NYB", "VIX": "^VIX",
-    "NVDA": "NVDA", "ARKK": "ARKK", sym: sym,
+    "NVDA": "NVDA", "ARKK": "ARKK",
+    "RBOB": "RB=F", "IEF": "IEF", "SHY": "SHY",
+    sym: sym,
 }.items()}
 df = pd.DataFrame(S).resample("W-FRI").last().ffill().dropna()
 
@@ -64,6 +66,10 @@ f["log_DXY"]  = np.log(df["DXY"])
 f["log_VIX"]  = np.log(df["VIX"])
 f["NVDA_excess"] = residualize(np.log(df["NVDA"]), f["log_QQQ"])
 f["ARKK_excess"] = residualize(np.log(df["ARKK"]), f["log_QQQ"])
+log_rbob = np.log(df["RBOB"])
+f["RBOB_zscore_52w"] = (log_rbob - log_rbob.rolling(52, min_periods=20).mean()) / log_rbob.rolling(52, min_periods=20).std()
+curve_log = np.log(df["IEF"]) - np.log(df["SHY"])
+f["curve_IEF_SHY_zscore_52w"] = (curve_log - curve_log.rolling(52, min_periods=20).mean()) / curve_log.rolling(52, min_periods=20).std()
 f[factor_name] = build_factor(sym, transform, df)
 
 EVENT_DEFS = [
@@ -78,6 +84,7 @@ EVENT_DEFS = [
     ("Musk_exits_DOGE",    "2025-04-22"),
     ("TrillionPay",        "2025-09-05"),
     ("Tariff_shock",       "2026-02-01"),
+    ("Robotaxi_Austin",    "2025-06-22"),
 ]
 for name, dt in EVENT_DEFS:
     d0 = pd.Timestamp(dt)
@@ -86,8 +93,9 @@ for name, dt in EVENT_DEFS:
 f = f.dropna()
 print(f"  n={len(f)} weeks  {f.index[0].date()} -> {f.index[-1].date()}")
 active_events = [f"E_{n}" for n, _ in EVENT_DEFS if f[f"E_{n}"].nunique() > 1]
-V6 = ["log_QQQ", "log_DXY", "log_VIX", "NVDA_excess", "ARKK_excess"] + active_events
-V_NEW = V6 + [factor_name]
+V63 = ["log_QQQ", "log_DXY", "log_VIX", "NVDA_excess", "ARKK_excess",
+       "RBOB_zscore_52w", "curve_IEF_SHY_zscore_52w"] + active_events
+V_NEW = V63 + [factor_name]
 
 def walk_forward(frame, factors, label):
     y_full = frame["log_TSLA"].to_numpy()
@@ -117,10 +125,46 @@ def walk_forward(frame, factors, label):
     print(f"  {label:<40}  In R2={r2_in:.4f}  In MAE={mae_in:5.2f}%  |  OOS R2={r2_oos:.4f}  OOS MAE={mae_oos:5.2f}%  (n_oos={len(oos_actual)})")
     return r2_oos, mae_oos
 
+
+def compute_vif(frame, factors):
+    """Variance inflation factor for each factor (1/(1-R²_i) from regressing
+    factor_i on all others). High VIF => multicollinear with existing set."""
+    X = frame[factors].to_numpy().astype(float)
+    vifs = {}
+    for j, fname in enumerate(factors):
+        y = X[:, j]
+        others = np.delete(X, j, axis=1)
+        Xo = np.column_stack([np.ones(len(others)), others])
+        b, *_ = np.linalg.lstsq(Xo, y, rcond=None)
+        yhat = Xo @ b
+        ss_res = ((y - yhat) ** 2).sum()
+        ss_tot = ((y - y.mean()) ** 2).sum()
+        r2 = 1.0 - ss_res / max(ss_tot, 1e-12)
+        vifs[fname] = 1.0 / max(1.0 - r2, 1e-10)
+    return vifs
+
+
+VIF_WARN = 5.0   # common rule of thumb; > 10 is severe
+
 print()
-r2_v6, _  = walk_forward(f, V6, "v6 baseline")
-r2_new, _ = walk_forward(f, V_NEW, f"v6 + {factor_name}")
-delta = (r2_new - r2_v6) * 100
+print("VIF screen (multicollinearity check):")
+f_clean = f.dropna(subset=V_NEW)
+vifs_new = compute_vif(f_clean, V_NEW)
+for fname in V_NEW:
+    v = vifs_new[fname]
+    flag   = "  ← WARN: multicollinear" if v > VIF_WARN else ""
+    marker = "  *candidate*" if fname == factor_name else ""
+    print(f"  {fname:<40}  VIF={v:6.2f}{marker}{flag}")
+candidate_vif = vifs_new.get(factor_name, float('inf'))
+if candidate_vif > VIF_WARN:
+    print(f"\n  *** Candidate VIF={candidate_vif:.2f} > {VIF_WARN}: likely multicollinear with existing factors. ***")
+    print(f"  Walk-forward collapse expected (PLTR/AAPL pattern). Continuing for documentation.\n")
+else:
+    print(f"\n  Candidate VIF={candidate_vif:.2f} — OK (below {VIF_WARN} threshold). Proceeding to walk-forward.\n")
+
+r2_v63, _ = walk_forward(f, V63, "v6.3 baseline")
+r2_new, _ = walk_forward(f, V_NEW, f"v6.3 + {factor_name}")
+delta = (r2_new - r2_v63) * 100
 print(f"\n  Delta OOS R^2: {delta:+.2f}pp")
 print(f"  Acceptance bar: >= +2.00pp")
 verdict = "ACCEPT" if delta >= 2.0 else "REJECT"

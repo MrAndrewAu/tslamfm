@@ -22,6 +22,9 @@ export interface ModelStats {
   sigma_resid_log: number
   sigma_t_method?: string
   sigma_t_latest?: number
+  q10_log?: number
+  q90_log?: number
+  sigma_IS_log?: number
   oos: {
     r2: number
     mae_pct: number
@@ -39,6 +42,8 @@ export interface CurrentSnapshot {
   sigma_low: number
   sigma_high: number
   sigma_t?: number
+  q_low?: number
+  q_high?: number
   factors_now: Record<string, number>
   contribution_dollars: {
     QQQ: number
@@ -85,6 +90,8 @@ export interface HistoryRow {
   low: number
   high: number
   sigma_t?: number
+  low_q?: number
+  high_q?: number
 }
 
 export interface LiveQuotes {

@@ -18,7 +18,7 @@ export default function ModelStats({ stats, nWeeks }: Props) {
       <div className="text-xs muted mb-5">
         In-sample tells you how well the model fits known data. Out-of-sample
         (walk-forward, refit weekly from 2025-01-03) tells you how well it would
-        have predicted the unknown future.
+        have predicted the unknown future. <span className="text-slate-300">These are goodness-of-fit numbers, not probabilities</span> — they describe explained variance, not the chance the price lands in the band.
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
@@ -52,7 +52,7 @@ export default function ModelStats({ stats, nWeeks }: Props) {
         <Stat
           label="σₜ (latest, EWMA)"
           value={(stats.sigma_t_latest ?? stats.sigma_resid_log).toFixed(3)}
-          help="Adaptive log-residual sigma. EWMA(λ=0.94) of past residuals — used to draw the ±1σ band. Tightens in calm regimes, widens after large surprises. Constant in-sample sigma for reference: 0.121."
+          help="Adaptive log-residual sigma (EWMA, λ=0.94). Used to scale the asymmetric 10–90% band so it tightens in calm regimes and widens after large surprises. Constant in-sample sigma for reference: 0.121."
         />
       </div>
     </div>

@@ -55,7 +55,7 @@ export default function Gauge({ actual, fair, low, high, asOf, isLive }: Props) 
           <div className="text-xs muted uppercase tracking-wider">Model fair value</div>
           <div className="text-4xl md:text-5xl mono font-semibold mt-1" style={{ color: fairColor }}>{fmtUSD(fair)}</div>
           <div className="text-[11px] muted mt-1 mono">
-            ±1σ band {fmtUSD(low, 0)} – {fmtUSD(high, 0)}
+            10–90% range {fmtUSD(low, 0)} – {fmtUSD(high, 0)}
           </div>
         </div>
       </div>
@@ -73,13 +73,13 @@ export default function Gauge({ actual, fair, low, high, asOf, isLive }: Props) 
         <div className="absolute top-1/2 -translate-y-1/2" style={{ left: `${pct(low)}%` }}>
           <div className="-translate-x-1/2 w-px h-3 bg-accent/60" />
           <div className="absolute -top-5 -translate-x-1/2 text-[10px] muted whitespace-nowrap mono">{fmtUSD(low, 0)}</div>
-          <div className="absolute top-4 -translate-x-1/2 text-[10px] muted whitespace-nowrap">−1σ</div>
+          <div className="absolute top-4 -translate-x-1/2 text-[10px] muted whitespace-nowrap">10%</div>
         </div>
         {/* Upper bound tick + label */}
         <div className="absolute top-1/2 -translate-y-1/2" style={{ left: `${pct(high)}%` }}>
           <div className="-translate-x-1/2 w-px h-3 bg-accent/60" />
           <div className="absolute -top-5 -translate-x-1/2 text-[10px] muted whitespace-nowrap mono">{fmtUSD(high, 0)}</div>
-          <div className="absolute top-4 -translate-x-1/2 text-[10px] muted whitespace-nowrap">+1σ</div>
+          <div className="absolute top-4 -translate-x-1/2 text-[10px] muted whitespace-nowrap">90%</div>
         </div>
         {/* Fair marker */}
         <div className="absolute top-1/2 -translate-y-1/2" style={{ left: `${pct(fair)}%` }}>
@@ -101,6 +101,11 @@ export default function Gauge({ actual, fair, low, high, asOf, isLive }: Props) 
           </span>
           <span className={`text-xs font-semibold ${verdict.color}`}>{verdict.label}</span>
         </div>
+      </div>
+
+      <div className="mt-4 pt-3 border-t border-line/50 text-[11px] muted leading-relaxed">
+        <span className="text-slate-300 font-semibold">How to read this.</span>{' '}
+        The 10–90% range is where, historically, ~80% of weekly closes have landed relative to the model. It is <span className="text-slate-300">not</span> a guarantee — about 1 week in 10 closes below the lower bound and 1 in 10 above the upper. The R² figures below describe how much of TSLA's <span className="text-slate-300">past variance</span> the model explained in-sample (88%) and out-of-sample (79%); they are <span className="text-slate-300">not</span> a probability that next week's price lands in the band. The model sees only QQQ, NVDA, ARKK, DXY, VIX, gasoline, the bond curve, and known catalyst windows — nothing about Musk, FSD, deliveries, or anything else.
       </div>
     </div>
   )

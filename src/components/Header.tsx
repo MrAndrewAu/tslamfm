@@ -17,7 +17,7 @@ export default function Header({ modelVersion, generatedAt }: Props) {
             <TeslaT size={22} />
           </div>
           <div>
-            <div className="text-lg font-semibold tracking-tight">tslamfm</div>
+            <div className="text-lg font-semibold tracking-tight">$TSLA MFM</div>
             <div className="text-xs muted -mt-0.5">TSLA multi-factor model</div>
           </div>
         </div>

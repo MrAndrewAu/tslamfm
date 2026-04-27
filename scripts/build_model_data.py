@@ -326,6 +326,29 @@ s2 = seed_var
 for i in range(len(resid_log)):
     sigma_t_arr[i] = float(np.sqrt(max(s2, 1e-8)))
     s2 = LAMBDA * s2 + (1 - LAMBDA) * (resid_log[i] ** 2)
+# Empirical asymmetric quantile bands (10th / 90th percentile), lookahead-free.
+# Row t uses residuals 0..t-1 only. Falls back to EWMA sigma for first 26 rows.
+# Per-row offsets are SCALED by sigma_t / sigma_IS so bands breathe with the
+# current vol regime (preserves EWMA's regime-aware width) while keeping the
+# asymmetric shape from the empirical residual distribution.
+_MIN_Q = 26
+sigma_IS = float(np.std(resid_log, ddof=1))   # static in-sample residual sigma
+q10_log_arr = np.empty(len(resid_log))
+q90_log_arr = np.empty(len(resid_log))
+for i in range(len(resid_log)):
+    past = resid_log[:i]
+    if len(past) < _MIN_Q:
+        q10_log_arr[i] = -sigma_t_arr[i]   # symmetric EWMA fallback
+        q90_log_arr[i] =  sigma_t_arr[i]
+    else:
+        q10_raw = float(np.percentile(past, 10))
+        q90_raw = float(np.percentile(past, 90))
+        scale = sigma_t_arr[i] / max(sigma_IS, 1e-8)
+        q10_log_arr[i] = q10_raw * scale
+        q90_log_arr[i] = q90_raw * scale
+# Full IS quantile offsets — used for live-quote path (scalar, all IS residuals).
+q10_log_global = float(np.percentile(resid_log, 10))
+q90_log_global = float(np.percentile(resid_log, 90))
 # Bands at row t use sigma_t (sqrt of variance estimated using info up to t-1)
 sigma_const = m["sigma"]
 history = []
@@ -340,6 +363,8 @@ for i, date in enumerate(f.index):
         "low":  round(fit_v * float(np.exp(-s_t)), 2),
         "high": round(fit_v * float(np.exp( s_t)), 2),
         "sigma_t": round(s_t, 5),
+        "low_q":  round(fit_v * float(np.exp(q10_log_arr[i])), 2),
+        "high_q": round(fit_v * float(np.exp(q90_log_arr[i])), 2),
     })
 # sigma_t for the next-week prediction (using info through latest row)
 sigma_t_next = float(np.sqrt(max(LAMBDA * (sigma_t_arr[-1] ** 2)
@@ -348,6 +373,16 @@ model_obj["stats"]["sigma_t_latest"] = sigma_t_next
 model_obj["current"]["sigma_low"]  = float(fair * np.exp(-sigma_t_next))
 model_obj["current"]["sigma_high"] = float(fair * np.exp( sigma_t_next))
 model_obj["current"]["sigma_t"]    = sigma_t_next
+# Quantile band offsets: latest snapshot scales the IS 10/90 by sigma_t/sigma_IS
+# so live bands track current vol regime (matches the per-row history scaling).
+scale_next = sigma_t_next / max(sigma_IS, 1e-8)
+q10_log_now = q10_log_global * scale_next
+q90_log_now = q90_log_global * scale_next
+model_obj["stats"]["q10_log"]    = q10_log_global   # unscaled IS reference
+model_obj["stats"]["q90_log"]    = q90_log_global
+model_obj["stats"]["sigma_IS_log"] = sigma_IS
+model_obj["current"]["q_low"]    = float(fair * np.exp(q10_log_now))
+model_obj["current"]["q_high"]   = float(fair * np.exp(q90_log_now))
 # Re-write model.json with updated sigma_t fields
 with open(OUT_DIR / "model.json", "w") as fh:
     json.dump(model_obj, fh, indent=2)
@@ -356,6 +391,8 @@ with open(OUT_DIR / "history.json", "w") as fh:
     json.dump(history, fh)
 print(f"Wrote {OUT_DIR / 'history.json'} ({len(history)} rows)")
 print(f"  sigma_t (EWMA lambda=0.94): latest={sigma_t_next:.4f}  constant ref={sigma_const:.4f}")
+print(f"  quantile bands (IS 10/90):  q10={q10_log_global:+.4f}  q90={q90_log_global:+.4f}")
+print(f"  scaled q (current regime):  q10={q10_log_now:+.4f}  q90={q90_log_now:+.4f}  (scale={scale_next:.3f})")
 
 # Console summary
 print(f"\nv6.3-canonical | factors={len(factors)} | n={len(f)}")
