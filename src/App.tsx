@@ -55,13 +55,16 @@ export default function App() {
 
   // Decide which snapshot to display: live (if available) or static current
   const snapshot = (() => {
+    // Use the latest adaptive sigma_t for live bands; fall back to constant
+    // residual sigma for older model.json files.
+    const sigmaForBands = model.stats.sigma_t_latest ?? model.stats.sigma_resid_log
     if (live) {
       const r = computeFairValue(model, live)
       return {
         actual: live.TSLA,
         fair:   r.fair,
-        low:    r.fair * Math.exp(-model.stats.sigma_resid_log),
-        high:   r.fair * Math.exp( model.stats.sigma_resid_log),
+        low:    r.fair * Math.exp(-sigmaForBands),
+        high:   r.fair * Math.exp( sigmaForBands),
         contributions: r.contribution_dollars,
         underlyings: {
           TSLA: live.TSLA, QQQ: live.QQQ, DXY: live.DXY,

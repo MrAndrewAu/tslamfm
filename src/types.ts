@@ -20,6 +20,8 @@ export interface ModelStats {
   r2_in: number
   mae_in_pct: number
   sigma_resid_log: number
+  sigma_t_method?: string
+  sigma_t_latest?: number
   oos: {
     r2: number
     mae_pct: number
@@ -36,6 +38,7 @@ export interface CurrentSnapshot {
   gap_pct: number
   sigma_low: number
   sigma_high: number
+  sigma_t?: number
   factors_now: Record<string, number>
   contribution_dollars: {
     QQQ: number
@@ -81,6 +84,7 @@ export interface HistoryRow {
   fitted: number
   low: number
   high: number
+  sigma_t?: number
 }
 
 export interface LiveQuotes {

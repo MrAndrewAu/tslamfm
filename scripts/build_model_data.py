@@ -1,8 +1,8 @@
 """
-Export v6.2-canonical TSLA multi-factor model coefficients + historical series
+Export v6.3-canonical TSLA multi-factor model coefficients + historical series
 to JSON files consumed by the React app.
 
-v6.2-canonical factors (v6.1 + bond-curve recession-pricing factor):
+v6.3-canonical factors (v6.2 + Robotaxi Austin sell-the-news event dummy):
   - log_QQQ, log_DXY, log_VIX (orthogonalized vs QQQ): NVDA_excess, ARKK_excess
   - RBOB_zscore_52w: 52w rolling z-score of log(RBOB gasoline futures) -- gas-
     affordability proxy. Promoted in v6.1 after gauntlet (+5.62pp OOS).
@@ -14,10 +14,21 @@ v6.2-canonical factors (v6.1 + bond-curve recession-pricing factor):
       sub-periods (2025-H1, 2025-H2, 2026-YTD) -- cleaner than RBOB's profile.
       See AI_CONTEXT.md sec 10.13.
   - 8-week event dummies, kept if p<0.10 (backward selection)
+  - E_Robotaxi_Austin (2025-06-22): β=-0.119, p=0.030, WF lift +2.30pp, perm-p=0.020.
+      Austin commercial robotaxi launch was a "sell-the-news" event; TSLA traded
+      -7% below model average for 8 consecutive weeks. Macro orthogonal (VIX/RBOB/
+      ARKK near OOS means during window). Promoted in v6.3 after permutation null
+      and walk-forward validation.
 
 Outputs:
   public/data/model.json    -- coefficients, residualizations, stats, current snapshot
-  public/data/history.json  -- weekly time series (actual, fitted, +/- 1 sigma band)
+  public/data/history.json  -- weekly time series (actual, fitted, +/- 1 sigma_t band)
+
+Uncertainty bands: per-row sigma_t computed via EWMA on past in-sample
+residuals (lambda=0.94, RiskMetrics standard, lookahead-free). Selected after
+adaptive-sigma probe -- C3_EWMA dominates constant sigma on coverage, log
+predictive density, and CRPS in the 2025-2026 OOS window. See AI_CONTEXT.md
+sec 10.14.
 """
 import json, warnings, numpy as np, pandas as pd, yfinance as yf
 from pathlib import Path
@@ -94,6 +105,7 @@ EVENT_DEFS = [
     ("Musk_exits_DOGE",    "2025-04-22", "Musk exits DOGE"),
     ("TrillionPay",        "2025-09-05", "$1T Musk pay package"),
     ("Tariff_shock",       "2026-02-01", "Tariff shock"),
+    ("Robotaxi_Austin",   "2025-06-22", "Austin robotaxi sell-the-news"),
 ]
 for name, dt, _ in EVENT_DEFS:
     d0 = pd.Timestamp(dt)
@@ -224,7 +236,7 @@ for name, dt, label in EVENT_DEFS:
         active_events.append({"name": name, "start": dt, "label": label})
 
 model_obj = {
-    "version": "v6.2-canonical-4y",
+    "version": "v6.3-canonical-4y",
     "generated_at": pd.Timestamp.utcnow().isoformat(),
     "window": {
         "start": str(f.index[0].date()),
@@ -264,6 +276,8 @@ model_obj = {
         "r2_in": float(m["r2"]),
         "mae_in_pct": mae_in,
         "sigma_resid_log": m["sigma"],
+        "sigma_t_method": "EWMA_lambda_0.94",
+        "sigma_t_latest": None,  # filled after EWMA pass below
         "oos": {
             "r2": float(r2_oos),
             "mae_pct": mae_oos,
@@ -300,25 +314,51 @@ with open(OUT_DIR / "model.json", "w") as fh:
     json.dump(model_obj, fh, indent=2)
 print(f"Wrote {OUT_DIR / 'model.json'}")
 
-# History series
-sigma = m["sigma"]
+# History series with EWMA(0.94) adaptive sigma_t.
+# Lookahead-free: sigma_t uses residuals strictly before t.
+#   sigma_t^2 = lambda * sigma_{t-1}^2 + (1-lambda) * resid_{t-1}^2
+#   seeded with var(first 26 in-sample residuals).
+LAMBDA = 0.94
+resid_log = m["resid"].to_numpy()
+seed_var = float(np.var(resid_log[:26], ddof=1))
+sigma_t_arr = np.empty(len(resid_log))
+s2 = seed_var
+for i in range(len(resid_log)):
+    sigma_t_arr[i] = float(np.sqrt(max(s2, 1e-8)))
+    s2 = LAMBDA * s2 + (1 - LAMBDA) * (resid_log[i] ** 2)
+# Bands at row t use sigma_t (sqrt of variance estimated using info up to t-1)
+sigma_const = m["sigma"]
 history = []
-for date in f.index:
+for i, date in enumerate(f.index):
     a = float(np.exp(f.loc[date, "log_TSLA"]))
     fit_v = float(np.exp(m["fitted"].loc[date]))
+    s_t = float(sigma_t_arr[i])
     history.append({
         "date": str(date.date()),
         "actual": round(a, 2),
         "fitted": round(fit_v, 2),
-        "low":  round(fit_v * float(np.exp(-sigma)), 2),
-        "high": round(fit_v * float(np.exp( sigma)), 2),
+        "low":  round(fit_v * float(np.exp(-s_t)), 2),
+        "high": round(fit_v * float(np.exp( s_t)), 2),
+        "sigma_t": round(s_t, 5),
     })
+# sigma_t for the next-week prediction (using info through latest row)
+sigma_t_next = float(np.sqrt(max(LAMBDA * (sigma_t_arr[-1] ** 2)
+                                 + (1 - LAMBDA) * (resid_log[-1] ** 2), 1e-8)))
+model_obj["stats"]["sigma_t_latest"] = sigma_t_next
+model_obj["current"]["sigma_low"]  = float(fair * np.exp(-sigma_t_next))
+model_obj["current"]["sigma_high"] = float(fair * np.exp( sigma_t_next))
+model_obj["current"]["sigma_t"]    = sigma_t_next
+# Re-write model.json with updated sigma_t fields
+with open(OUT_DIR / "model.json", "w") as fh:
+    json.dump(model_obj, fh, indent=2)
+
 with open(OUT_DIR / "history.json", "w") as fh:
     json.dump(history, fh)
 print(f"Wrote {OUT_DIR / 'history.json'} ({len(history)} rows)")
+print(f"  sigma_t (EWMA lambda=0.94): latest={sigma_t_next:.4f}  constant ref={sigma_const:.4f}")
 
 # Console summary
-print(f"\nv6.2-canonical | factors={len(factors)} | n={len(f)}")
+print(f"\nv6.3-canonical | factors={len(factors)} | n={len(f)}")
 print(f"  In-sample:  R²={m['r2']:.4f}  MAE={mae_in:.2f}%")
 print(f"  OOS:        R²={r2_oos:.4f}  MAE={mae_oos:.2f}%  Corr={corr_oos:.3f}")
 print(f"  Current:    TSLA=${actual_now:.2f}  Fair=${fair:.2f}  Gap={(actual_now/fair-1)*100:+.1f}%")

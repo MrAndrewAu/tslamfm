@@ -56,7 +56,13 @@ export default function Methodology({ model }: Props) {
                 <code className="mono">curve_IEF_SHY_zscore_52w = (log(IEF/SHY) − μ₅₂) / σ₅₂</code> — bond-curve shape (7–10y vs 1–3y Treasuries), z-scored against the trailing 52 weeks. Added in v6.2 as a recession/rate-cut pricing proxy: bull-flattening (curve up = long bonds outperform) discounts TSLA. Cleared the same 5-test gauntlet on top of v6.1 with a +4.88pp OOS R² lift, lift positive in all three OOS sub-periods, and 0/500 permutations beat observed. Note: CURVE is a strict complement to RBOB — alone it hurts the model; only additive on top of v6.1.
               </p>
               <p>
+                <code className="mono">E_Robotaxi_Austin</code> — 8-week dummy starting 2025-06-22 (Austin commercial robotaxi service launch). Added in v6.3: TSLA traded −7% below model average for all 8 consecutive weeks of the launch window — a classic "sell-the-news" effect. The signal is macro-orthogonal (VIX/RBOB/ARKK were near OOS means throughout). β=−0.119 (p=0.030), walk-forward OOS R² lift +2.30pp, permutation null p=0.020 (permutation 95th percentile was +0.23pp vs observed +0.32pp).
+              </p>
+              <p>
                 Coefficients fit by OLS on weekly Friday closes from {model.window.start} to {model.window.end} ({model.window.n_weeks} weeks).
+              </p>
+              <p>
+                <span className="text-slate-300">Uncertainty bands (±1σₜ).</span> Per-row σₜ is an EWMA of past in-sample residuals with λ=0.94 (RiskMetrics standard, half-life ≈11 weeks, lookahead-free). Selected after testing four candidates against the OOS window: constant σ, VIX-regressed σ, 26-week rolling std, and EWMA. EWMA dominated on coverage error, mean log predictive density, and CRPS. The constant in-sample σ (0.121) was over-conservative — OOS coverage at ±1σ was 91% vs the Gaussian target of 68%; EWMA brings that to 64%.
               </p>
             </div>
           </section>
