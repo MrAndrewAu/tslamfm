@@ -25,6 +25,9 @@ export interface ModelStats {
   q10_log?: number
   q90_log?: number
   sigma_IS_log?: number
+  band_coverage_backtest?: number
+  band_coverage_oos?: number
+  band_backtest_start?: string | null
   oos: {
     r2: number
     mae_pct: number

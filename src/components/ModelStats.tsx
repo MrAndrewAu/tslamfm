@@ -25,7 +25,7 @@ export default function ModelStats({ stats, nWeeks }: Props) {
         <Stat
           label="In-sample R²"
           value={stats.r2_in.toFixed(3)}
-          help="Variance explained on the 6-year fit window. Don't be impressed by this alone."
+          help="Variance explained on the model fit window. Don't be impressed by this alone."
         />
         <Stat
           label="In-sample MAE"
@@ -52,7 +52,7 @@ export default function ModelStats({ stats, nWeeks }: Props) {
         <Stat
           label="σₜ (latest, EWMA)"
           value={(stats.sigma_t_latest ?? stats.sigma_resid_log).toFixed(3)}
-          help="Adaptive log-residual sigma (EWMA, λ=0.94). Used to scale the asymmetric 10–90% band so it tightens in calm regimes and widens after large surprises. Constant in-sample sigma for reference: 0.121."
+          help="Adaptive forecast-error sigma (EWMA, λ=0.94). Used to scale the predictive range so it tightens in calm regimes and widens after large surprises. Constant full-sample fit sigma is shown only as a reference."
         />
       </div>
     </div>

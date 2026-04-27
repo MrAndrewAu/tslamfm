@@ -14,6 +14,12 @@ function pStars(p: number | null | undefined): string {
 
 export default function Methodology({ model }: Props) {
   const [open, setOpen] = useState(false)
+  const bandCoverageBacktest = model.stats.band_coverage_backtest != null
+    ? `${(model.stats.band_coverage_backtest * 100).toFixed(1)}%`
+    : null
+  const bandCoverageOos = model.stats.band_coverage_oos != null
+    ? `${(model.stats.band_coverage_oos * 100).toFixed(1)}%`
+    : null
   return (
     <div className="panel p-6">
       <button
@@ -62,7 +68,8 @@ export default function Methodology({ model }: Props) {
                 Coefficients fit by OLS on weekly Friday closes from {model.window.start} to {model.window.end} ({model.window.n_weeks} weeks).
               </p>
               <p>
-                <span className="text-slate-300">Uncertainty bands (±1σₜ).</span> Per-row σₜ is an EWMA of past in-sample residuals with λ=0.94 (RiskMetrics standard, half-life ≈11 weeks, lookahead-free). Selected after testing four candidates against the OOS window: constant σ, VIX-regressed σ, 26-week rolling std, and EWMA. EWMA dominated on coverage error, mean log predictive density, and CRPS. The constant in-sample σ (0.121) was over-conservative — OOS coverage at ±1σ was 91% vs the Gaussian target of 68%; EWMA brings that to 64%.
+                <span className="text-slate-300">Predictive range.</span> The shaded band is calibrated from expanding <span className="text-slate-300">one-step-ahead forecast errors</span>, not full-sample fit residuals. At each row, the raw asymmetry comes from the earlier 10th / 90th percentile forecast errors, while width is scaled by an EWMA(λ=0.94) forecast-error sigma so the range tightens in calm regimes and widens after large misses. This keeps the range lookahead-free and predictive rather than merely descriptive of the fitted history.
+                {bandCoverageBacktest && bandCoverageOos && model.stats.band_backtest_start ? ` Realized coverage in backtest was ${bandCoverageBacktest} since ${model.stats.band_backtest_start}, and ${bandCoverageOos} in the official OOS window since ${model.stats.oos.start}.` : ''}
               </p>
             </div>
           </section>
@@ -130,7 +137,7 @@ export default function Methodology({ model }: Props) {
 
           <section className="text-xs muted">
             <h3 className="font-semibold text-slate-300 mb-2">Honest limits</h3>
-            <p>This is a statistical model, not advice. It does not know about: Musk's tweets, robotaxi rollout, Optimus, FSD progress, regulatory action, fraud, brand sentiment, or anything not encoded in QQQ/DXY/VIX/NVDA/ARKK. The OOS correlation is high but the OOS R² is currently negative because actual TSLA is sitting well below model fair value — that gap is the market pricing in things this model can't see. Use accordingly.</p>
+            <p>This is a statistical model, not advice. It does not know about: Musk's tweets, robotaxi rollout, Optimus, FSD progress, regulatory action, fraud, brand sentiment, or anything not encoded in QQQ/DXY/VIX/NVDA/ARKK/RBOB/CURVE plus the selected event windows. The current shipped walk-forward stats are OOS R² {model.stats.oos.r2.toFixed(3)} and OOS correlation {model.stats.oos.corr.toFixed(3)}. If actual TSLA sits meaningfully away from model fair value, the market is pricing something this factor set cannot see. Use accordingly.</p>
           </section>
         </div>
       )}

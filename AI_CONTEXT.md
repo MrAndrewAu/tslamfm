@@ -51,7 +51,7 @@ tslamfm/
     └── components/
         ├── Header.tsx                # Tesla T badge + title
         ├── TeslaT.tsx                # Custom T mark, viewBox 0 0 40 50
-        ├── Gauge.tsx                 # Fair vs market, ±1σ band, gap
+        ├── Gauge.tsx                 # Legacy hero panel (no longer mounted)
         ├── FactorBars.tsx            # Per-factor $ contributions
         ├── HistoryChart.tsx          # Weekly fit chart, residuals toggle
         ├── ModelStats.tsx            # R², MAE, OOS metrics
@@ -63,55 +63,86 @@ tslamfm/
 
 ## 4. The model — current canonical version
 
-**Label:** `v6-canonical-4y` (written into `model.json`).
-**Window:** `2022-04-26 → 2026-04-26` (4 years, 209 weekly observations).
+**Label:** `v6.4-canonical-4y` (written into `model.json`).
+**Economic window:** `2022-04-26 → 2026-04-26` (user-approved 4-year regime).
+**Effective fit window after rolling-factor warmup:** `2022-09-09 → 2026-04-24` (190 weekly observations).
 **Frequency:** weekly closes (Friday).
 
-### 4.1 Factors (13 total)
+### 4.1 Factors (11 total)
 
-Forced (5):
+Forced continuous factors (7):
 - `log_QQQ` — tech-market beta
-- `log_DXY` — dollar strength
-- `log_VIX` — volatility (TSLA carries a vol premium)
-- `NVDA_excess` — NVDA log-return residualized on `log_QQQ`
-- `ARKK_excess` — ARKK log-return residualized on `log_QQQ`
+- `log_DXY` — dollar strength. **Note:** retained on theoretical grounds (dollar regime is a persistent driver of large-cap risk assets), not because it clears a statistical bar in the current window. In the v6.4 fit `log_DXY` has p≈0.61 — effectively noise over 2022-09 → 2026-04. Forced factors are not subject to the `p<0.10` backward gate; only event dummies are. It is kept so that other factors do not silently absorb dollar moves the next time DXY actually matters; revisit if it stays insignificant across multiple regimes.
+- `log_VIX` — volatility premium
+- `NVDA_excess` — NVDA residualized on `log_QQQ`
+- `ARKK_excess` — ARKK residualized on `log_QQQ`
+- `RBOB_zscore_52w` — gas-affordability proxy
+- `curve_IEF_SHY_zscore_52w` — bond-curve / recession-pricing proxy
 
-Event dummies (8 of 11 active in window — pre-window events drop out automatically):
-- 8-week step dummies anchored at known catalysts.
-- Anything dated before 2022-04-26 has zero variation in the window and is excluded by the `has_variation()` filter.
+Selected event dummies (4):
+- `E_AI_day_2023`
+- `E_Trump_election`
+- `E_Tariff_shock`
+- `E_Robotaxi_Austin`
+
+Important: as of v6.4, event dummies are **actually** selected by backward elimination at `p < 0.10`. The prior v6.3 builder had drifted and was silently including every event with variation; v6.4 fixes that.
 
 ### 4.2 Algorithm
 
 ```
-1. Pull weekly closes for TSLA, QQQ, DX-Y.NYB, ^VIX, NVDA, ARKK from yfinance.
+1. Pull weekly closes for TSLA, QQQ, DX-Y.NYB, ^VIX, NVDA, ARKK, RBOB, IEF, SHY.
+  Price loader now falls back from Ticker.history() to yf.download() because
+  yfinance intermittently fails on IEF/SHY.
 2. Take logs.
-3. Residualize NVDA on log_QQQ:  NVDA_excess = log(NVDA) - (a + b·log_QQQ)
-   Same for ARKK.
-   (Stops collinearity from inflating R² and confusing factor attribution.)
-4. Build event dummies E_<name>: 1 for 8 weeks starting at event date, else 0.
-5. has_variation() filter: drop any E_* that is all-zero in the fit window.
-6. OLS regression of log_TSLA on [intercept, forced factors, active events].
-7. Walk-forward OOS: starting 2025-01-03, refit weekly, predict next week.
-8. Bucket per-factor log contributions into dollar buckets via marginal multiplier:
-       dollars(c) = e^logfair − e^(logfair − c)
-   Buckets: baseline / QQQ / DXY / VIX / NVDA_rotation / ARKK_rotation / events
-9. Emit model.json + history.json.
+3. Residualize NVDA and ARKK on log_QQQ.
+4. Build 8-week event dummies E_<name>.
+5. Drop any event dummy with zero variation in the effective fit window.
+6. Run backward elimination on active events until all remaining event p-values
+  are <= 0.10.
+7. Fit OLS on [intercept, forced factors, surviving events].
+8. Walk forward from 2025-01-03: for each next-week prediction, re-run the same
+  backward event selection on the training slice, refit, and predict one step ahead.
+9. Calibrate the displayed predictive range from expanding one-step forecast
+  errors only (no lookahead):
+    - raw asymmetry from expanding 10th / 90th percentiles of past forecast errors
+    - current width from EWMA(lambda=0.94) on past forecast errors
+10. Emit model.json + history.json.
 ```
 
-### 4.3 Current metrics (as of last build, 2026-04-26)
+### 4.3 Motivation for v6.4
+
+v6.4 is a **methodology hardening release**, not a new factor-generation jump.
+It should be labeled `v6.4`, not `v7`, because no new economic story was added.
+
+Two integrity issues were fixed:
+
+1. **Event-selection drift.** The v6.3 code claimed event dummies were kept only
+  if significant, but the actual builder was including all events with variation.
+  That overstated certainty and polluted the live model with weak event overlays.
+2. **Non-predictive band.** The visible range was being derived from full-sample
+  fitted residuals, which is descriptive of historical fit but too flattering if
+  read as a forward-looking range. v6.4 recalibrates the band from expanding
+  one-step forecast errors so the displayed range is genuinely predictive.
+
+Trade-off: this makes the model a little less flattering but more honest.
+
+### 4.4 Current metrics (as of last successful build, 2026-04-27)
 
 | Metric | Value |
 |---|---:|
-| In-sample R² | 0.853 |
-| In-sample MAE | 9.0 % |
-| **OOS R²** | **0.66** |
-| OOS MAE | 7.7 % |
-| OOS correlation | 0.84 |
+| In-sample R² | 0.881 |
+| In-sample MAE | 8.49 % |
+| **OOS R²** | **0.733** |
+| OOS MAE | 6.92 % |
+| OOS correlation | 0.876 |
 | TSLA actual | $376.30 |
-| **Fair value** | **$455** |
-| Gap | −17 % (undervalued) |
+| **Fair value** | **$396.75** |
+| Gap | −5.2 % |
+| Predictive-band backtest coverage | 93.8 % |
+| Predictive-band OOS coverage | 93.8 % |
+| Predictive-band backtest start | 2025-02-07 |
 
-These are the numbers the user signed off on. Do not regenerate without re-checking that fair value lands in a believable range.
+These are the current signed-off v6.4 numbers. The predictive range is honest but conservative; do not market it as a literal 10–90 interval.
 
 ---
 
@@ -130,7 +161,22 @@ Reasonable but missed 2023–24 AI rotation effects. R² ~ 0.7 in-sample.
 - QQQ×VIX interaction caused unstable betas and overfitting. Removed.
 
 ### v6: NVDA_excess + ARKK_excess + event dummies
-This is the canonical structure. NVDA captures AI rotation; ARKK captures speculative growth rotation; events pick up isolated catalysts (split, robotaxi unveil, deliveries miss, etc.).
+This established the canonical structure. NVDA captures AI rotation; ARKK captures speculative growth rotation; events pick up isolated catalysts.
+
+### v6.1 / v6.2 / v6.3
+- v6.1 promoted `RBOB_zscore_52w`.
+- v6.2 promoted `curve_IEF_SHY_zscore_52w`.
+- v6.3 promoted `E_Robotaxi_Austin` and introduced the static UI range work.
+
+### v6.4: methodology hardening (current production)
+- Restored **actual backward selection** for event dummies (`p < 0.10`) instead of
+  silently including every event with variation.
+- Recalibrated the visible range from **expanding one-step forecast errors** instead
+  of full-sample fit residuals, making the band predictive and lookahead-free.
+- Outcome: OOS R² fell from the overfit-looking `0.787` variant to `0.733`, fair
+  value moved from ~$388 to ~$397, and only 4 event dummies survived.
+- Conclusion: this is the more honest model and should be treated as the canonical
+  release going forward.
 
 ### v7 / v10: "100 % accuracy" trap — **DATA LEAKAGE BUG**
 Tried adding `log_TSLA_dollar = log(volume × price)` as a regressor. Fit went to R² ≈ 1.0. **It was leakage** — the regressor contained `log(price)` directly. Caught by manually inspecting the term. **Lesson: any regressor algebraically derived from the target is leakage. Audit anything that produces R² > 0.95.**
@@ -163,12 +209,14 @@ Picked because:
 6. **Tesla T logo viewBox** must be `0 0 40 50`. An earlier `0 0 342 35` rendered ~2 px tall.
 7. **In-sample R² is a vanity metric.** Always cite OOS R². The user has been burned by this.
 8. **If you find an R² that looks too good (> 0.95), assume leakage and audit the regressor list before celebrating.**
+9. **Displayed band coverage must be measured, not assumed.** If the UI uses a predictive range, derive it from forecast errors and quote realized coverage from the generated stats.
+10. **yfinance is flaky on IEF/SHY.** Use the fallback in `wk()`; if the builder crashes on a fetch, suspect data plumbing before suspecting model math.
 
 ---
 
 ## 7. UI design language
 
-- **Blue (`#3b82f6`)** — neutral "model voice." Used for: fair value figure in `Gauge`, "Model total" in `FactorBars`, fitted line + ±1σ band + selected timeframe tab in `HistoryChart`.
+- **Blue (`#3b82f6`)** — neutral "model voice." Used for: fair value figure, "Model total" in `FactorBars`, fitted line + predictive range + selected timeframe tab in `HistoryChart`.
 - **Green (`bg-good` / `text-good`)** — positive contribution / undervalued.
 - **Red (`bg-bad` / `text-bad`)** — negative contribution / overvalued. **Reserved for negative signals.** Do not use red for the model line.
 - **Amber (`text-warn`)** — fairly valued, ±2 % gap.
@@ -202,9 +250,9 @@ npm run build                           # verify dist/ builds
 ## 10. Factor expansion attempts — TESTED AND REJECTED (April 2026)
 
 **Bottom line:** options data, raw volume, and FINRA microstructure all
-investigated for a v7. **All rejected.** v6-canonical-4y remains production.
-v6's OOS R^2 = 0.66 appears to be close to what's achievable with weekly
-Friday data and public macro inputs.
+investigated for a future v7. **All rejected.** v6.4-canonical-4y remains production.
+Current OOS R^2 = 0.733 is probably close to the honest ceiling for weekly
+TSLA with public macro inputs plus a small number of defensible event overlays.
 
 ### 10.1 Options data (marketdata.app) — REJECTED
 

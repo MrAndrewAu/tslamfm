@@ -1,7 +1,7 @@
 import type { Model, LiveQuotes } from '../types'
 
 /**
- * Compute current fair value from live quotes using v6.2-canonical coefficients.
+ * Compute current fair value from live quotes using the shipped v6.4 coefficients.
  * Uses the residualization equations to compute NVDA_excess, ARKK_excess on the fly.
  * RBOB_zscore_52w, curve_IEF_SHY_zscore_52w, and active event dummies are taken
  * from the static model snapshot (slow-moving regime/calendar factors -- not

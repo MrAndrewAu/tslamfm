@@ -49,7 +49,7 @@ if len(sys.argv) < 3:
 sym, transform = sys.argv[1], sys.argv[2]
 factor_name = f"{sym}_{transform}"
 
-print(f"Walk-forward: v6.3 vs v6.3 + {factor_name}")
+print(f"Walk-forward: v6.4 baseline vs v6.4 + {factor_name}")
 print("Fetching weekly closes...")
 S = {k: wk(v) for k, v in {
     "TSLA": "TSLA", "QQQ": "QQQ", "DXY": "DX-Y.NYB", "VIX": "^VIX",
@@ -162,8 +162,8 @@ if candidate_vif > VIF_WARN:
 else:
     print(f"\n  Candidate VIF={candidate_vif:.2f} — OK (below {VIF_WARN} threshold). Proceeding to walk-forward.\n")
 
-r2_v63, _ = walk_forward(f, V63, "v6.3 baseline")
-r2_new, _ = walk_forward(f, V_NEW, f"v6.3 + {factor_name}")
+r2_v63, _ = walk_forward(f, V63, "v6.4 baseline")
+r2_new, _ = walk_forward(f, V_NEW, f"v6.4 + {factor_name}")
 delta = (r2_new - r2_v63) * 100
 print(f"\n  Delta OOS R^2: {delta:+.2f}pp")
 print(f"  Acceptance bar: >= +2.00pp")

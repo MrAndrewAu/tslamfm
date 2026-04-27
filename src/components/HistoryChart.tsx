@@ -29,11 +29,16 @@ const RANGES = [
 export default function HistoryChart({ history, model, snapshot }: Props) {
   const [range, setRange] = useState<'1Y' | '3Y' | 'ALL'>('ALL')
   const [showResid, setShowResid] = useState(false)
+  const coverageBacktest = model.stats.band_coverage_backtest
+  const coverageOos = model.stats.band_coverage_oos
+  const bandBacktestStart = model.stats.band_backtest_start
+
+  const fmtCoverage = (value?: number) => value != null ? `${(value * 100).toFixed(1)}%` : null
 
   const data = useMemo(() => {
     const slice = (() => {
       if (range === 'ALL') return history
-      const cutoff = new Date()
+      const cutoff = new Date(history[history.length - 1]?.date ?? new Date().toISOString())
       cutoff.setMonth(cutoff.getMonth() - RANGES.find(r => r.key === range)!.months)
       const iso = cutoff.toISOString().slice(0, 10)
       return history.filter(r => r.date >= iso)
@@ -83,14 +88,14 @@ export default function HistoryChart({ history, model, snapshot }: Props) {
           </div>
         </div>
         <div>
-          <div className="text-[10px] muted uppercase tracking-wider">10–90% range</div>
+          <div className="text-[10px] muted uppercase tracking-wider">Predictive range</div>
           <div className="text-sm mono leading-none mt-1.5">{fmtUSD(low, 0)} – {fmtUSD(high, 0)}</div>
         </div>
       </div>
 
       <div className="flex items-center justify-between mb-3 pt-3 border-t border-line/50">
         <div className="text-[11px] muted">
-          Weekly: actual price vs model fair value, 10–90% range
+          Weekly: actual price vs model fair value, predictive range
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -169,13 +174,17 @@ export default function HistoryChart({ history, model, snapshot }: Props) {
       <div className="flex items-center gap-4 mt-3 text-[11px] muted">
         <span className="flex items-center gap-1.5"><span className="w-3 h-0.5 bg-slate-200" /> actual</span>
         <span className="flex items-center gap-1.5"><span className="w-3 h-0.5" style={{ background: '#3b82f6' }} /> model fair</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm" style={{ background: 'rgba(59,130,246,0.2)' }} /> 10–90%</span>
+        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm" style={{ background: 'rgba(59,130,246,0.2)' }} /> predictive range</span>
         <span className="flex items-center gap-1.5"><span className="w-3 border-t border-dashed border-dim" /> events</span>
       </div>
 
       <div className="mt-4 pt-3 border-t border-line/50 text-[11px] muted leading-relaxed">
         <span className="text-slate-300 font-semibold">How to read this.</span>{' '}
-        The 10–90% range is where, historically, ~80% of weekly closes have landed relative to the model. It is <span className="text-slate-300">not</span> a guarantee — about 1 week in 10 closes below the lower bound and 1 in 10 above. The R² figures below describe how much of TSLA's <span className="text-slate-300">past variance</span> the model explained in-sample (88%) and out-of-sample (79%); they are <span className="text-slate-300">not</span> a probability that next week's price lands in the band. The model sees only QQQ, NVDA, ARKK, DXY, VIX, gasoline, the bond curve, and known catalyst windows — nothing about Musk, FSD, deliveries, or anything else.
+        The blue line is the model's fair-value estimate; the shaded range is calibrated from <span className="text-slate-300">earlier one-step forecast errors</span>, not from a probability distribution assumed in advance.
+        {coverageBacktest != null && coverageOos != null && bandBacktestStart ? (
+          <> In backtest it contained <span className="text-slate-300">{fmtCoverage(coverageBacktest)}</span> of weeks since <span className="mono">{bandBacktestStart}</span>, and <span className="text-slate-300">{fmtCoverage(coverageOos)}</span> in the official OOS window since <span className="mono">{model.stats.oos.start}</span>.</>
+        ) : null}
+        {' '}The R² figures below describe how much of TSLA's <span className="text-slate-300">variance</span> the model explained in-sample and out-of-sample; they are <span className="text-slate-300">not</span> the probability that next week's price lands in the range. The model sees only QQQ, NVDA, ARKK, DXY, VIX, gasoline, the bond curve, and selected catalyst windows — nothing about Musk, FSD, deliveries, or anything else.
       </div>
     </div>
   )

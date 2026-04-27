@@ -1,9 +1,18 @@
 """
-Export v6.3-canonical TSLA multi-factor model coefficients + historical series
+Export v6.4-canonical TSLA multi-factor model coefficients + historical series
 to JSON files consumed by the React app.
 
-v6.3-canonical factors (v6.2 + Robotaxi Austin sell-the-news event dummy):
+v6.4-canonical factors (v6.3 structure, methodology hardened):
   - log_QQQ, log_DXY, log_VIX (orthogonalized vs QQQ): NVDA_excess, ARKK_excess
+    NOTE on log_DXY: kept as a *forced* factor on theoretical grounds (dollar
+    regime is a persistent driver of large-cap risk assets), NOT because it
+    clears a statistical bar in the current 4y window. In the v6.4 fit its
+    p-value is ~0.61 (effectively noise over 2022-09 -> 2026-04). It is
+    retained for cross-regime stability: dropping it would let other factors
+    silently absorb dollar moves and bias their betas the next time DXY
+    matters. Forced factors are NOT subject to the p<0.10 backward gate;
+    only event dummies are. Revisit if log_DXY stays insignificant across
+    multiple regimes.
   - RBOB_zscore_52w: 52w rolling z-score of log(RBOB gasoline futures) -- gas-
     affordability proxy. Promoted in v6.1 after gauntlet (+5.62pp OOS).
   - curve_IEF_SHY_zscore_52w: 52w rolling z-score of log(IEF/SHY) -- bond-curve
@@ -13,22 +22,25 @@ v6.3-canonical factors (v6.2 + Robotaxi Austin sell-the-news event dummy):
       -5.31pp; v6.1+CURVE = +4.88pp). Lift positive in ALL three OOS
       sub-periods (2025-H1, 2025-H2, 2026-YTD) -- cleaner than RBOB's profile.
       See AI_CONTEXT.md sec 10.13.
-  - 8-week event dummies, kept if p<0.10 (backward selection)
-  - E_Robotaxi_Austin (2025-06-22): β=-0.119, p=0.030, WF lift +2.30pp, perm-p=0.020.
+    - 8-week event dummies, kept if p<0.10 (backward selection)
+    - E_Robotaxi_Austin (2025-06-22): β=-0.119, p=0.030, WF lift +2.30pp, perm-p=0.020.
       Austin commercial robotaxi launch was a "sell-the-news" event; TSLA traded
       -7% below model average for 8 consecutive weeks. Macro orthogonal (VIX/RBOB/
       ARKK near OOS means during window). Promoted in v6.3 after permutation null
       and walk-forward validation.
+    - v6.4 hardening: event dummies are now truly kept by backward selection
+        (p<0.10) and the displayed range is calibrated from expanding one-step
+        forecast errors rather than full-sample fit residuals.
 
 Outputs:
-  public/data/model.json    -- coefficients, residualizations, stats, current snapshot
-  public/data/history.json  -- weekly time series (actual, fitted, +/- 1 sigma_t band)
+    public/data/model.json    -- coefficients, residualizations, stats, current snapshot
+    public/data/history.json  -- weekly time series (actual, fitted, predictive range)
 
-Uncertainty bands: per-row sigma_t computed via EWMA on past in-sample
-residuals (lambda=0.94, RiskMetrics standard, lookahead-free). Selected after
-adaptive-sigma probe -- C3_EWMA dominates constant sigma on coverage, log
-predictive density, and CRPS in the 2025-2026 OOS window. See AI_CONTEXT.md
-sec 10.14.
+Predictive range: calibrated from expanding one-step-ahead forecast errors.
+At each row, the displayed range uses only earlier forecast errors (no lookahead):
+    - raw shape from expanding 10th / 90th percentiles of past forecast errors
+    - width from EWMA(lambda=0.94) on past forecast errors
+This keeps the band predictive, asymmetric, and regime-aware.
 """
 import json, warnings, numpy as np, pandas as pd, yfinance as yf
 from pathlib import Path
@@ -39,14 +51,36 @@ OUT_DIR = Path(__file__).resolve().parents[1] / "public" / "data"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 START, END = "2022-04-26", "2026-04-26"
+OOS_START = "2025-01-03"
+MIN_TRAIN = 100
+EVENT_P_THRESHOLD = 0.10
+LAMBDA = 0.94
+BAND_MIN_ERRORS = 26
 
 def wk(sym):
-    s = yf.Ticker(sym).history(start=START, end=END, interval="1wk")["Close"]
-    idx = pd.to_datetime(s.index)
-    if getattr(idx, "tz", None) is not None:
-        idx = idx.tz_localize(None)
-    s.index = idx
-    return s
+    candidates = []
+    try:
+        candidates.append(yf.Ticker(sym).history(start=START, end=END, interval="1wk")["Close"])
+    except Exception:
+        pass
+    try:
+        dl = yf.download(sym, start=START, end=END, interval="1wk", progress=False, auto_adjust=False)
+        if not dl.empty and "Close" in dl.columns:
+            candidates.append(dl["Close"])
+    except Exception:
+        pass
+
+    for s in candidates:
+        s = s.dropna()
+        if s.empty:
+            continue
+        idx = pd.to_datetime(s.index)
+        if getattr(idx, "tz", None) is not None:
+            idx = idx.tz_localize(None)
+        s.index = idx
+        return s
+
+    raise RuntimeError(f"Failed to fetch weekly close for {sym}")
 
 def residualize(target, base):
     """Returns (intercept, beta, residuals). target = a + b*base + e."""
@@ -145,9 +179,35 @@ def fit(frame, factors):
                 factors=list(factors), n=n, k=k,
                 sigma=float(np.sqrt(s2)))
 
-selected = FORCED + ALL_EVENTS
-m = fit(f, selected)
-factors = selected
+def select_factors(frame, forced, candidate_events, p_threshold=EVENT_P_THRESHOLD):
+    events = [e for e in candidate_events if frame[e].nunique() > 1]
+    factors = forced + events
+    m_local = fit(frame, factors)
+    while events:
+        event_ps = [(e, float(m_local["p"][1 + factors.index(e)])) for e in events]
+        worst_event, worst_p = max(event_ps, key=lambda item: item[1])
+        if worst_p <= p_threshold:
+            break
+        events.remove(worst_event)
+        factors = forced + events
+        m_local = fit(frame, factors)
+    return factors, events, m_local
+
+def recursive_predictions(frame, forced, candidate_events, min_train=MIN_TRAIN):
+    pred_log = pd.Series(index=frame.index, dtype=float)
+    for date, row in frame.iterrows():
+        train = frame.loc[:date].iloc[:-1]
+        if len(train) < min_train:
+            continue
+        facs, _, train_model = select_factors(train, forced, candidate_events)
+        xv = np.array([1.0] + [float(row[c]) for c in facs])
+        pred_log.loc[date] = float(xv @ train_model["beta"])
+    return pred_log
+
+factors, kept_events, m = select_factors(f, FORCED, ALL_EVENTS)
+print(f"  events kept after backward selection: {len(kept_events)}")
+for e in kept_events:
+    print(f"    {e}")
 
 # In-sample stats
 y = f["log_TSLA"].to_numpy()
@@ -155,23 +215,15 @@ yhat = m["fitted"].to_numpy()
 resid_pct = (np.exp(y - yhat) - 1) * 100  # actual vs fitted
 mae_in = float(np.mean(np.abs(resid_pct)))
 
-# OOS walk-forward from 2025-01-03
+# Walk-forward one-step predictions (same backward event selection, no lookahead)
 print("Walk-forward OOS...")
-ho = f.loc["2025-01-03":]
-oos_actual, oos_pred = [], []
-for date, row in ho.iterrows():
-    train = f.loc[:date].iloc[:-1]
-    if len(train) < 100:
-        continue
-    facs = [c for c in factors if c in train.columns]
-    Xt = np.column_stack([np.ones(len(train))] + [train[c].to_numpy() for c in facs])
-    yt = train["log_TSLA"].to_numpy()
-    bt, *_ = np.linalg.lstsq(Xt, yt, rcond=None)
-    xv = np.array([1.0] + [float(row[c]) for c in facs])
-    oos_pred.append(float(np.exp(xv @ bt)))
-    oos_actual.append(float(np.exp(row["log_TSLA"])))
+pred_log = recursive_predictions(f, FORCED, ALL_EVENTS)
+predicted_rows = pred_log.dropna().index
+pred_errors_log = (f.loc[predicted_rows, "log_TSLA"] - pred_log.loc[predicted_rows]).astype(float)
 
-oos_actual = np.array(oos_actual); oos_pred = np.array(oos_pred)
+oos_idx = predicted_rows[predicted_rows >= pd.Timestamp(OOS_START)]
+oos_pred = np.exp(pred_log.loc[oos_idx].to_numpy())
+oos_actual = np.exp(f.loc[oos_idx, "log_TSLA"].to_numpy())
 mae_oos = float(np.mean(np.abs(oos_pred / oos_actual - 1)) * 100)
 ss_tot = float(((oos_actual - oos_actual.mean()) ** 2).sum())
 ss_res = float(((oos_actual - oos_pred) ** 2).sum())
@@ -236,7 +288,7 @@ for name, dt, label in EVENT_DEFS:
         active_events.append({"name": name, "start": dt, "label": label})
 
 model_obj = {
-    "version": "v6.3-canonical-4y",
+    "version": "v6.4-canonical-4y",
     "generated_at": pd.Timestamp.utcnow().isoformat(),
     "window": {
         "start": str(f.index[0].date()),
@@ -276,13 +328,13 @@ model_obj = {
         "r2_in": float(m["r2"]),
         "mae_in_pct": mae_in,
         "sigma_resid_log": m["sigma"],
-        "sigma_t_method": "EWMA_lambda_0.94",
+        "sigma_t_method": "EWMA_lambda_0.94_on_one_step_errors",
         "sigma_t_latest": None,  # filled after EWMA pass below
         "oos": {
             "r2": float(r2_oos),
             "mae_pct": mae_oos,
             "corr": corr_oos,
-            "start": "2025-01-03",
+            "start": OOS_START,
             "n": int(len(oos_actual)),
         },
     },
@@ -314,75 +366,96 @@ with open(OUT_DIR / "model.json", "w") as fh:
     json.dump(model_obj, fh, indent=2)
 print(f"Wrote {OUT_DIR / 'model.json'}")
 
-# History series with EWMA(0.94) adaptive sigma_t.
-# Lookahead-free: sigma_t uses residuals strictly before t.
-#   sigma_t^2 = lambda * sigma_{t-1}^2 + (1-lambda) * resid_{t-1}^2
-#   seeded with var(first 26 in-sample residuals).
-LAMBDA = 0.94
+# Predictive band calibration.
+# Centerline remains the full-sample fair-value fit; the displayed range is
+# calibrated from expanding one-step-ahead forecast errors only.
 resid_log = m["resid"].to_numpy()
-seed_var = float(np.var(resid_log[:26], ddof=1))
-sigma_t_arr = np.empty(len(resid_log))
-s2 = seed_var
-for i in range(len(resid_log)):
-    sigma_t_arr[i] = float(np.sqrt(max(s2, 1e-8)))
-    s2 = LAMBDA * s2 + (1 - LAMBDA) * (resid_log[i] ** 2)
-# Empirical asymmetric quantile bands (10th / 90th percentile), lookahead-free.
-# Row t uses residuals 0..t-1 only. Falls back to EWMA sigma for first 26 rows.
-# Per-row offsets are SCALED by sigma_t / sigma_IS so bands breathe with the
-# current vol regime (preserves EWMA's regime-aware width) while keeping the
-# asymmetric shape from the empirical residual distribution.
-_MIN_Q = 26
-sigma_IS = float(np.std(resid_log, ddof=1))   # static in-sample residual sigma
-q10_log_arr = np.empty(len(resid_log))
-q90_log_arr = np.empty(len(resid_log))
-for i in range(len(resid_log)):
-    past = resid_log[:i]
-    if len(past) < _MIN_Q:
-        q10_log_arr[i] = -sigma_t_arr[i]   # symmetric EWMA fallback
-        q90_log_arr[i] =  sigma_t_arr[i]
-    else:
-        q10_raw = float(np.percentile(past, 10))
-        q90_raw = float(np.percentile(past, 90))
-        scale = sigma_t_arr[i] / max(sigma_IS, 1e-8)
-        q10_log_arr[i] = q10_raw * scale
-        q90_log_arr[i] = q90_raw * scale
-# Full IS quantile offsets — used for live-quote path (scalar, all IS residuals).
-q10_log_global = float(np.percentile(resid_log, 10))
-q90_log_global = float(np.percentile(resid_log, 90))
-# Bands at row t use sigma_t (sqrt of variance estimated using info up to t-1)
 sigma_const = m["sigma"]
+seed_var = float(np.var(resid_log[:26], ddof=1))
+fallback_sigma_arr = np.empty(len(resid_log))
+s2_fallback = seed_var
+for i in range(len(resid_log)):
+    fallback_sigma_arr[i] = float(np.sqrt(max(s2_fallback, 1e-8)))
+    s2_fallback = LAMBDA * s2_fallback + (1 - LAMBDA) * (resid_log[i] ** 2)
+
+sigma_pred_is = float(np.std(pred_errors_log.to_numpy(), ddof=1))
+q10_log_global = float(np.percentile(pred_errors_log.to_numpy(), 10))
+q90_log_global = float(np.percentile(pred_errors_log.to_numpy(), 90))
+
+seen_pred_errors = []
+pred_var_state = None
+row_band_low = []
+row_band_high = []
+row_sigma = []
+predictive_band_ready = []
 history = []
 for i, date in enumerate(f.index):
     a = float(np.exp(f.loc[date, "log_TSLA"]))
     fit_v = float(np.exp(m["fitted"].loc[date]))
-    s_t = float(sigma_t_arr[i])
+    if len(seen_pred_errors) >= BAND_MIN_ERRORS:
+        if pred_var_state is None:
+            pred_var_state = float(np.var(np.array(seen_pred_errors), ddof=1))
+        sigma_band = float(np.sqrt(max(pred_var_state, 1e-8)))
+        q10_raw = float(np.percentile(seen_pred_errors, 10))
+        q90_raw = float(np.percentile(seen_pred_errors, 90))
+        scale = sigma_band / max(sigma_pred_is, 1e-8)
+        q10_offset = q10_raw * scale
+        q90_offset = q90_raw * scale
+        predictive_band_ready.append(True)
+    else:
+        sigma_band = float(fallback_sigma_arr[i])
+        q10_offset = -sigma_band
+        q90_offset = sigma_band
+        predictive_band_ready.append(False)
+    row_sigma.append(sigma_band)
+    row_band_low.append(fit_v * float(np.exp(q10_offset)))
+    row_band_high.append(fit_v * float(np.exp(q90_offset)))
     history.append({
         "date": str(date.date()),
         "actual": round(a, 2),
         "fitted": round(fit_v, 2),
-        "low":  round(fit_v * float(np.exp(-s_t)), 2),
-        "high": round(fit_v * float(np.exp( s_t)), 2),
-        "sigma_t": round(s_t, 5),
-        "low_q":  round(fit_v * float(np.exp(q10_log_arr[i])), 2),
-        "high_q": round(fit_v * float(np.exp(q90_log_arr[i])), 2),
+        "low":  round(fit_v * float(np.exp(-sigma_band)), 2),
+        "high": round(fit_v * float(np.exp( sigma_band)), 2),
+        "sigma_t": round(sigma_band, 5),
+        "low_q":  round(fit_v * float(np.exp(q10_offset)), 2),
+        "high_q": round(fit_v * float(np.exp(q90_offset)), 2),
     })
-# sigma_t for the next-week prediction (using info through latest row)
-sigma_t_next = float(np.sqrt(max(LAMBDA * (sigma_t_arr[-1] ** 2)
-                                 + (1 - LAMBDA) * (resid_log[-1] ** 2), 1e-8)))
+    if date in pred_errors_log.index:
+        err = float(pred_errors_log.loc[date])
+        seen_pred_errors.append(err)
+        if pred_var_state is not None:
+            pred_var_state = LAMBDA * pred_var_state + (1 - LAMBDA) * (err ** 2)
+
+# Predictive sigma for the next week (uses all known one-step forecast errors).
+if pred_var_state is None:
+    sigma_t_next = float(fallback_sigma_arr[-1])
+else:
+    sigma_t_next = float(np.sqrt(max(pred_var_state, 1e-8)))
 model_obj["stats"]["sigma_t_latest"] = sigma_t_next
 model_obj["current"]["sigma_low"]  = float(fair * np.exp(-sigma_t_next))
 model_obj["current"]["sigma_high"] = float(fair * np.exp( sigma_t_next))
 model_obj["current"]["sigma_t"]    = sigma_t_next
-# Quantile band offsets: latest snapshot scales the IS 10/90 by sigma_t/sigma_IS
-# so live bands track current vol regime (matches the per-row history scaling).
-scale_next = sigma_t_next / max(sigma_IS, 1e-8)
+# Quantile band offsets: latest snapshot scales predictive 10/90 by sigma_t/sigma_pred_is
+# so live bands track the current forecast-error regime.
+scale_next = sigma_t_next / max(sigma_pred_is, 1e-8)
 q10_log_now = q10_log_global * scale_next
 q90_log_now = q90_log_global * scale_next
-model_obj["stats"]["q10_log"]    = q10_log_global   # unscaled IS reference
+model_obj["stats"]["q10_log"]    = q10_log_global
 model_obj["stats"]["q90_log"]    = q90_log_global
-model_obj["stats"]["sigma_IS_log"] = sigma_IS
+model_obj["stats"]["sigma_IS_log"] = sigma_pred_is
 model_obj["current"]["q_low"]    = float(fair * np.exp(q10_log_now))
 model_obj["current"]["q_high"]   = float(fair * np.exp(q90_log_now))
+
+# Realized backtest coverage of the predictive range.
+predictive_rows = [h for h, ready in zip(history, predictive_band_ready) if ready]
+predictive_rows_oos = [h for h, ready in zip(history, predictive_band_ready)
+                       if ready and h["date"] >= OOS_START]
+coverage_backtest = float(np.mean([r["low_q"] <= r["actual"] <= r["high_q"] for r in predictive_rows]))
+coverage_oos = float(np.mean([r["low_q"] <= r["actual"] <= r["high_q"] for r in predictive_rows_oos]))
+model_obj["stats"]["band_coverage_backtest"] = coverage_backtest
+model_obj["stats"]["band_coverage_oos"] = coverage_oos
+model_obj["stats"]["band_backtest_start"] = predictive_rows[0]["date"] if predictive_rows else None
+
 # Re-write model.json with updated sigma_t fields
 with open(OUT_DIR / "model.json", "w") as fh:
     json.dump(model_obj, fh, indent=2)
@@ -391,11 +464,12 @@ with open(OUT_DIR / "history.json", "w") as fh:
     json.dump(history, fh)
 print(f"Wrote {OUT_DIR / 'history.json'} ({len(history)} rows)")
 print(f"  sigma_t (EWMA lambda=0.94): latest={sigma_t_next:.4f}  constant ref={sigma_const:.4f}")
-print(f"  quantile bands (IS 10/90):  q10={q10_log_global:+.4f}  q90={q90_log_global:+.4f}")
-print(f"  scaled q (current regime):  q10={q10_log_now:+.4f}  q90={q90_log_now:+.4f}  (scale={scale_next:.3f})")
+print(f"  predictive q (expanding 10/90):  q10={q10_log_global:+.4f}  q90={q90_log_global:+.4f}")
+print(f"  scaled q (current regime):       q10={q10_log_now:+.4f}  q90={q90_log_now:+.4f}  (scale={scale_next:.3f})")
+print(f"  predictive band coverage:        backtest={coverage_backtest:.3f}  oos={coverage_oos:.3f}")
 
 # Console summary
-print(f"\nv6.3-canonical | factors={len(factors)} | n={len(f)}")
+print(f"\nv6.4-canonical | factors={len(factors)} | n={len(f)}")
 print(f"  In-sample:  R²={m['r2']:.4f}  MAE={mae_in:.2f}%")
 print(f"  OOS:        R²={r2_oos:.4f}  MAE={mae_oos:.2f}%  Corr={corr_oos:.3f}")
 print(f"  Current:    TSLA=${actual_now:.2f}  Fair=${fair:.2f}  Gap={(actual_now/fair-1)*100:+.1f}%")
