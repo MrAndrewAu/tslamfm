@@ -1,10 +1,11 @@
 import type { Model, LiveQuotes } from '../types'
 
 /**
- * Compute current fair value from live quotes using v6-canonical coefficients.
+ * Compute current fair value from live quotes using v6.2-canonical coefficients.
  * Uses the residualization equations to compute NVDA_excess, ARKK_excess on the fly.
- * Active events are taken from the static model snapshot (events evolve slowly,
- * not via live quotes).
+ * RBOB_zscore_52w, curve_IEF_SHY_zscore_52w, and active event dummies are taken
+ * from the static model snapshot (slow-moving regime/calendar factors -- not
+ * driven by intraday quotes).
  */
 export function computeFairValue(model: Model, q: LiveQuotes): {
   fair: number
@@ -26,9 +27,15 @@ export function computeFairValue(model: Model, q: LiveQuotes): {
     log_QQQ, log_DXY, log_VIX, NVDA_excess, ARKK_excess,
   }
 
-  // Carry over event dummies from the static current snapshot — they're date-driven.
-  for (const k of Object.keys(model.current.factors_now)) {
-    if (k.startsWith('E_')) fac[k] = model.current.factors_now[k]
+  // Carry over RBOB_zscore_52w, curve_IEF_SHY_zscore_52w + event dummies from
+  // the static snapshot. These are slow-moving regime / calendar factors;
+  // updating from intraday quotes would be misleading.
+  const snapFactors = model.current.factors_now
+  for (const k of ['RBOB_zscore_52w', 'curve_IEF_SHY_zscore_52w']) {
+    if (k in snapFactors) fac[k] = snapFactors[k]
+  }
+  for (const k of Object.keys(snapFactors)) {
+    if (k.startsWith('E_')) fac[k] = snapFactors[k]
   }
 
   const c = model.coefficients
@@ -46,17 +53,21 @@ export function computeFairValue(model: Model, q: LiveQuotes): {
     .reduce((s, f) => s + (c[f] ?? 0) * (fac[f] ?? 0), 0)
 
   const contributions = {
-    QQQ:           cd('log_QQQ'),
-    DXY:           cd('log_DXY'),
-    VIX:           cd('log_VIX'),
-    NVDA_rotation: cd('NVDA_excess'),
-    ARKK_rotation: cd('ARKK_excess'),
-    events:        partial(eventLog),
+    QQQ:               cd('log_QQQ'),
+    DXY:               cd('log_DXY'),
+    VIX:               cd('log_VIX'),
+    NVDA_rotation:     cd('NVDA_excess'),
+    ARKK_rotation:     cd('ARKK_excess'),
+    gas_affordability: cd('RBOB_zscore_52w'),
+    recession_pricing: cd('curve_IEF_SHY_zscore_52w'),
+    events:            partial(eventLog),
     baseline: 0, // filled below
   }
   contributions.baseline = fair - (
     contributions.QQQ + contributions.DXY + contributions.VIX +
-    contributions.NVDA_rotation + contributions.ARKK_rotation + contributions.events
+    contributions.NVDA_rotation + contributions.ARKK_rotation +
+    contributions.gas_affordability + contributions.recession_pricing +
+    contributions.events
   )
 
   return { fair, log_fair, factors: fac, contribution_dollars: contributions }

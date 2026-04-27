@@ -66,6 +66,9 @@ export default function App() {
         underlyings: {
           TSLA: live.TSLA, QQQ: live.QQQ, DXY: live.DXY,
           VIX: live.VIX, NVDA: live.NVDA, ARKK: live.ARKK,
+          RBOB: model.current.underlyings.RBOB,
+          IEF:  model.current.underlyings.IEF,
+          SHY:  model.current.underlyings.SHY,
         },
         asOf: new Date(live.fetched_at).toLocaleString('en-US', {
           dateStyle: 'medium', timeStyle: 'short',

@@ -338,8 +338,14 @@ re-testing if regimes change:
 - `fetch_finra_volume.py`
 - `analyze_microstructure_signal.py`
 - `analyze_crypto_signal.py`
+- `analyze_equity_signal.py`
 - `build_model_data_v7.py` (header notes the rejection)
 - `build_model_data_v7crypto.py` (header notes the rejection)
+- `walkforward_pltr.py` (header notes the rejection)
+- `walkforward_aapl.py` (header notes the rejection / saturation finding)
+- `walkforward_generic.py` (reusable single-factor walk-forward harness)
+- `walkforward_xlu_robustness.py` (header notes the rejection)
+- `walkforward_v6_audit.py` (leave-one-out audit confirming all v6 factors pay rent)
 
 Output CSVs:
 - `public/data/options_features.csv` (50 rows, Trial-tier window)
@@ -387,6 +393,205 @@ mentioned in §5). Treat any future "PROMISING" verdict whose OOS-period
 sub-correlation is insignificant or sign-flipped as REJECT-candidate by
 default. The full-sample lagged correlation is misleading when the
 underlying relationship is regime-dependent.
+
+### 10.8 Equity factors (PLTR, COST) — REJECTED (April 2026)
+
+**Files:** `scripts/analyze_equity_signal.py`, `scripts/walkforward_pltr.py`.
+
+Tested two economically-distinct candidates: PLTR (retail / story-stock /
+meme premium, hypothesis: positive) and COST (defensive consumer / risk-off
+rotation, hypothesis: negative).
+
+**Candidate-test results (n=190-209, full 4yr sample):**
+| factor | corr_t+1 | p | OOS sub-period corr (p) | verdict |
+|---|---|---|---|---|
+| log_PLTR | +0.04 | 0.54 | -0.34 (0.004) | REJECT |
+| PLTR_excess_vs_QQQ | +0.12 | 0.078 | -0.06 (0.63) | WEAK |
+| **PLTR_zscore_52w** | **+0.32** | **<0.001** | **+0.25 (0.043)** | **PROMISING ✓both gates** |
+| log_COST | -0.06 | 0.41 | -0.33 (0.006) | REJECT |
+| COST_excess_vs_QQQ | -0.19 | 0.005 | +0.05 (0.71) | PROMISING (sign-flip) |
+| COST_zscore_52w | -0.05 | 0.48 | -0.07 (0.58) | REJECT |
+
+**PLTR_zscore_52w was the first factor in the entire exploration to pass
+both the lagged-correlation gate AND the OOS sub-period sanity check
+(same sign, still significant in 2025-2026).** It earned a walk-forward.
+
+**Walk-forward results:**
+| Variant | n | In-sample R² | OOS R² | OOS MAE | Δ vs v6 |
+|---|---|---|---|---|---|
+| **v6 baseline** (re-run on n=190) | 190 | 0.854 | **0.659** | 7.81% | — |
+| v6 + PLTR_zscore_52w | 190 | 0.887 | 0.554 | 8.27% | **−10.48pp** |
+
+REJECTED. In-sample R² lift was +3.3pp but OOS R² collapsed by 10.5pp.
+Likely cause: **multicollinearity with NVDA_excess / ARKK_excess**. The PLTR
+z-score adds explanatory power in-sample but its coefficient is unstable
+across the rolling refits, so OOS predictions degrade.
+
+COST_excess never reached walk-forward — OOS sub-period sign-flip (full
+sample −0.19, OOS sub-period +0.05) put it in the same bucket as
+microstructure / BTC / ETH.
+
+**Critical new lesson:** Even passing the OOS sub-period sanity check is
+**NOT sufficient**. Walk-forward R² lift is the only gate that matters.
+Multicollinearity with existing factors (NVDA/ARKK already absorb most
+retail-momentum / story-stock variance) can void otherwise-valid univariate
+signals. Future candidate-tests should add a **multicollinearity check**
+(VIF or partial correlation against the existing factor set) before
+proceeding to walk-forward, to fail faster and cheaper.
+
+### 10.9 v6 leave-one-out audit — ALL FACTORS PASS (April 2026)
+
+**File:** `scripts/walkforward_v6_audit.py`.
+
+After PLTR rejection, reasonable to ask: do v6's own factors clear the +2pp
+bar we apply to candidates? Answer: yes, decisively.
+
+| Drop | OOS R² | Δ vs full v6 |
+|---|---|---|
+| (none) full v6 | 0.6615 | — (ref) |
+| − log_QQQ | −1.2178 | **+187.91pp** |
+| − ARKK_excess | 0.4566 | **+20.48pp** |
+| − log_DXY | 0.4825 | **+17.89pp** |
+| − NVDA_excess | 0.5865 | **+7.49pp** |
+| − all events | 0.6349 | +2.66pp |
+| − log_VIX | 0.6396 | +2.19pp ⚠ marginal |
+
+NVDA_excess and ARKK_excess both clear the bar with room. log_VIX is the
+weakest tenant — just barely passes; if a future regime weakens it further,
+it's a candidate for replacement.
+
+**Methodological note:** candidate-test (lagged corr + OOS sub-period)
+returns corr_t = 0.000 by OLS construction for any factor already in the
+model — v6 residuals are orthogonal to the regressors that fit them.
+**Only leave-one-out walk-forward is meaningful for in-model factors.**
+This is why PLTR's failure is not a contradiction with NVDA's success:
+they were tested with the appropriate framework for each.
+
+### 10.10 Equity factors (F, GM, AAPL) — REJECTED, saturation confirmed (April 2026)
+
+**Files:** `scripts/analyze_equity_signal.py`, `scripts/walkforward_aapl.py`.
+
+Tested three more economically-distinct candidates: F and GM (legacy-auto
+share-shift hypothesis: negative); AAPL (mega-cap tech control; expected
+to be absorbed by QQQ + NVDA + ARKK).
+
+**Candidate-test results (n=190-209, full 4yr sample):**
+| factor | corr_t+1 | p | OOS sub-period (p) | verdict |
+|---|---|---|---|---|
+| log_F / F_excess / F_zscore | ~0 | 0.77-0.79 | -0.10 to -0.22 | REJECT |
+| log_GM / GM_excess | ~0 | 0.50-0.76 | -0.03 to +0.08 | REJECT |
+| GM_zscore_52w | -0.20 | 0.006 | +0.05 (0.66) | REJECT (sign-flip) |
+| log_AAPL | +0.17 | 0.013 | -0.02 (0.90) | REJECT (sign-flip) |
+| **AAPL_excess_vs_QQQ** | **+0.54** | **<0.001** | **+0.19 (0.115)** | borderline ⚠ |
+| AAPL_zscore_52w | +0.44 | <0.001 | +0.09 (0.49) | REJECT (insignificant OOS) |
+
+F: legacy-auto share-shift thesis simply doesn't show up in the data.
+GM: full-sample signal but classic OOS sign-flip — same regime trap as
+microstructure / BTC / ETH / COST.
+AAPL_excess: **strongest univariate signal in the entire exploration**
+(corr +0.544). OOS sub-period right sign but p=0.115 (just shy of strict
+0.05 gate). Promoted to walk-forward as falsification test.
+
+**Walk-forward (AAPL_excess only):**
+| Variant | n | In-sample R² | OOS R² | OOS MAE | Δ vs v6 |
+|---|---|---|---|---|---|
+| **v6 baseline** | 209 | 0.853 | **0.662** | 7.71% | — |
+| v6 + AAPL_excess | 209 | 0.914 | 0.584 | 9.56% | **−7.80pp** |
+
+**In-sample R² lift was +6.0pp — the largest of any candidate ever tested.**
+**OOS R² dropped 7.8pp.** Pure multicollinearity overfit.
+
+**Definitive saturation finding:** The strongest possible univariate tech
+signal cannot beat NVDA + ARKK in walk-forward. v6's tech-co-movement
+factor set is **saturated**. Future candidates sharing variance with
+QQQ / NVDA / ARKK are essentially guaranteed to fail walk-forward
+regardless of how strong their univariate correlation looks.
+
+The five rejection categories now span the full failure space:
+1. **Regime-dependent** (microstructure, BTC, ETH, COST, GM) — full-sample
+   PROMISING but OOS sub-period flat/flipped.
+2. **Multicollinearity-saturated** (PLTR, AAPL) — passes one or both
+   pre-gates but cannot beat the existing factor set in walk-forward.
+3. **Genuinely uncorrelated** (raw volume, F, log_GM, log_AAPL) — fails
+   at the lagged-correlation gate.
+
+**Equity-factor branch closed.** Further factor work should target
+**orthogonal economic stories** (macro indicators, fundamentals,
+earnings cycle, regime-switching variables) rather than more equities.
+
+### 10.11 Sector / EV-peer factors (XOM, XLU, LAC, BYDDY, RIVN) — REJECTED (April 2026)
+
+**Files:** `scripts/analyze_equity_signal.py`, `scripts/walkforward_generic.py`,
+`scripts/walkforward_xlu_robustness.py`.
+
+Re-opened the branch one more time to test factors with **genuinely
+orthogonal economic stories** (per §10.10 closing recommendation).
+
+**Candidate-test results (n=115-209):**
+| factor | corr_t+1 | p | OOS sub-period (p) | verdict |
+|---|---|---|---|---|
+| XOM (all variants) | small | n.s. | small/inconclusive | REJECT |
+| **XLU_zscore_52w** | **−0.20** | 0.006 | **−0.40 (0.001)** | ✓ both gates pass |
+| LAC (all variants) | -0.17 to -0.19 | borderline | flat in OOS | REJECT |
+| BYDDY (all variants) | +0.19 to +0.34 | <0.005 | sign-flipped −0.21 to −0.34 | REJECT |
+| **RIVN_zscore_52w** | **+0.36** | <0.001 | **+0.35 (0.003)** | ✓ both gates pass |
+
+**XLU and RIVN both passed both pre-gates with OOS sub-period as strong
+as full-sample** — first time we've seen this. Promoted both to walk-forward.
+
+**Walk-forward results:**
+| Variant | n | In-sample R² | OOS R² | OOS MAE | Δ vs v6 |
+|---|---|---|---|---|---|
+| **v6 baseline** | 190 | 0.854 | **0.659** | 7.81% | — |
+| v6 + XLU_zscore_52w | 190 | 0.869 | 0.675 | **7.40%** | **+1.60pp** ⚠ |
+| v6 + RIVN_zscore_52w | 190 | 0.913 | 0.606 | 7.25% | **−5.22pp** |
+
+**RIVN: REJECT.** +6pp in-sample lift, −5.2pp OOS — same multicollinearity
+overfit as AAPL. EV pure-play overlaps maximally with TSLA's own
+variance. **Third confirmation of the saturation hypothesis.**
+
+**XLU: closest call in the entire exploration.** First factor to:
+- Post a positive OOS R² lift (+1.60pp)
+- Reduce OOS MAE (7.81% → 7.40%, 41bp improvement)
+- Have OOS sub-period correlation *stronger* than full-sample
+- Tell a genuinely orthogonal economic story (defensives ≠ tech)
+
+But still 0.40pp short of the +2pp bar. Ran three robustness checks
+before deciding (`walkforward_xlu_robustness.py`):
+
+| Robustness test | Variant | Δ OOS R² |
+|---|---|---|
+| (a) Variant robustness | v6 + XLU_zscore_52w | +1.60pp |
+| (a) Variant robustness | v6 + log_XLU | **−0.54pp** |
+| (a) Variant robustness | v6 + XLU_excess_vs_QQQ | **−0.54pp** |
+| (b) Tenant-swap (drop VIX) | v6 − log_VIX | −3.37pp |
+| (b) Tenant-swap | v6 − log_VIX + XLU_zscore_52w | **+0.55pp** |
+
+All three checks failed:
+1. **Single-variant fragility** — only `zscore_52w` helps; `log_XLU` and
+   `XLU_excess` both hurt. Real factors usually show up across reasonable
+   transforms; concentration in one variant smells like spurious
+   regime-matching to the 2024-2026 window.
+2. **Tenant-swap** — XLU is a partial *substitute* for VIX (both reach
+   for "defensive rotation / fear" signal), not a complement. VIX does
+   it better — dropping VIX even with XLU added still costs 3.37pp,
+   recovering to only +0.55pp net.
+3. **Best-case +1.60pp never clears the +2pp gate.**
+
+**Verdict: REJECT. Gate held. v6 stays.**
+
+This was the right gate-discipline test: a tempting near-miss (best-ever
+candidate) failed the additional robustness scrutiny, validating the
+ex-ante +2pp bar. Documenting `walkforward_xlu_robustness.py` and
+`walkforward_generic.py` as the reusable framework for any future
+candidate that lands in the +1 to +2pp grey zone.
+
+**Final lesson:** Multicollinearity-saturation hypothesis (§10.10) now
+has three confirmations (PLTR, AAPL, RIVN — all tech/EV peers, all
+catastrophic OOS drops despite huge in-sample lifts). The truly
+orthogonal candidate (XLU) survived farther but still failed robustness
+checks. **The branch is now definitively closed.** Next factor work
+should target macro / fundamentals / regime-switching, not equities.
 
 ## 11. Other open items
 

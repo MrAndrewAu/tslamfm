@@ -40,11 +40,24 @@ export default function Methodology({ model }: Props) {
           + β₃·log(VIX)
           + β₄·NVDA_excess
           + β₅·ARKK_excess
+          + β₆·RBOB_zscore_52w
+          + β₇·curve_IEF_SHY_zscore_52w
           + Σ event_dummies
           + ε`}
             </pre>
-            <div className="text-xs muted mt-2">
-              <code className="mono">NVDA_excess = log(NVDA) − (a + b·log(QQQ))</code> — the residual of NVDA after regressing on QQQ. Same structure for ARKK_excess. This isolates the rotation component from the market beta. Coefficients fit by OLS on weekly Friday closes from {model.window.start} to {model.window.end} ({model.window.n_weeks} weeks).
+            <div className="text-xs muted mt-2 space-y-2">
+              <p>
+                <code className="mono">NVDA_excess = log(NVDA) − (a + b·log(QQQ))</code> — the residual of NVDA after regressing on QQQ. Same structure for ARKK_excess. This isolates the rotation component from the market beta.
+              </p>
+              <p>
+                <code className="mono">RBOB_zscore_52w = (log(RBOB) − μ₅₂) / σ₅₂</code> — gasoline futures z-scored against the trailing 52 weeks (backward-only, no lookahead). Added in v6.1 as a gas-affordability proxy: high gas hurts EV demand. Cleared a 5-test gauntlet — variant robustness, VIX-complement check, lookahead-clean transform, sub-period split, and a 500-shuffle permutation null (0/500 beat the observed +5.62pp OOS R² lift).
+              </p>
+              <p>
+                <code className="mono">curve_IEF_SHY_zscore_52w = (log(IEF/SHY) − μ₅₂) / σ₅₂</code> — bond-curve shape (7–10y vs 1–3y Treasuries), z-scored against the trailing 52 weeks. Added in v6.2 as a recession/rate-cut pricing proxy: bull-flattening (curve up = long bonds outperform) discounts TSLA. Cleared the same 5-test gauntlet on top of v6.1 with a +4.88pp OOS R² lift, lift positive in all three OOS sub-periods, and 0/500 permutations beat observed. Note: CURVE is a strict complement to RBOB — alone it hurts the model; only additive on top of v6.1.
+              </p>
+              <p>
+                Coefficients fit by OLS on weekly Friday closes from {model.window.start} to {model.window.end} ({model.window.n_weeks} weeks).
+              </p>
             </div>
           </section>
 

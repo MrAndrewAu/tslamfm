@@ -8,13 +8,15 @@ interface Props {
 }
 
 const ROWS: { key: keyof Props['contributions']; label: string; help: string }[] = [
-  { key: 'baseline',      label: 'Baseline (intercept)', help: 'Model constant — what TSLA would be if every factor were zero.' },
-  { key: 'QQQ',           label: 'QQQ level',           help: 'Tech-market beta. Positive = tech market lifts TSLA.' },
-  { key: 'DXY',           label: 'Dollar (DXY)',        help: 'Dollar strength. Positive coefficient is unusual; reflects regime.' },
-  { key: 'VIX',           label: 'VIX',                 help: 'Volatility. TSLA carries a vol premium.' },
-  { key: 'NVDA_rotation', label: 'NVDA rotation',       help: 'NVDA performance net of QQQ. Negative β = TSLA suffers when NVDA outperforms.' },
-  { key: 'ARKK_rotation', label: 'ARKK rotation',       help: 'ARKK performance net of QQQ. Speculative-growth rotation.' },
-  { key: 'events',        label: 'Active events',       help: 'Sum of 8-week event dummies currently active.' },
+  { key: 'baseline',          label: 'Baseline (intercept)', help: 'Model constant — what TSLA would be if every factor were zero.' },
+  { key: 'QQQ',               label: 'QQQ level',           help: 'Tech-market beta. Positive = tech market lifts TSLA.' },
+  { key: 'DXY',               label: 'Dollar (DXY)',        help: 'Dollar strength. Positive coefficient is unusual; reflects regime.' },
+  { key: 'VIX',               label: 'VIX',                 help: 'Volatility. TSLA carries a vol premium.' },
+  { key: 'NVDA_rotation',     label: 'NVDA rotation',       help: 'NVDA performance net of QQQ. Negative β = TSLA suffers when NVDA outperforms.' },
+  { key: 'ARKK_rotation',     label: 'ARKK rotation',       help: 'ARKK performance net of QQQ. Speculative-growth rotation.' },
+  { key: 'gas_affordability', label: 'Gas affordability',   help: 'RBOB gasoline futures, 52w rolling z-score. High gas → EV affordability headwind. Added in v6.1.' },
+  { key: 'recession_pricing', label: 'Recession pricing',   help: 'log(IEF/SHY) curve-shape z-score. Bull-flattening = rate-cut/recession pricing → TSLA discount. Added in v6.2.' },
+  { key: 'events',            label: 'Active events',       help: 'Sum of 8-week event dummies currently active.' },
 ]
 
 export default function FactorBars({ contributions, fair, underlyings }: Props) {
@@ -58,8 +60,8 @@ export default function FactorBars({ contributions, fair, underlyings }: Props) 
         </div>
       </div>
 
-      <div className="mt-6 pt-4 border-t border-line grid grid-cols-3 md:grid-cols-6 gap-3 text-[11px]">
-        {(['TSLA', 'QQQ', 'DXY', 'VIX', 'NVDA', 'ARKK'] as const).map(k => (
+      <div className="mt-6 pt-4 border-t border-line grid grid-cols-3 md:grid-cols-9 gap-3 text-[11px]">
+        {(['TSLA', 'QQQ', 'DXY', 'VIX', 'NVDA', 'ARKK', 'RBOB', 'IEF', 'SHY'] as const).map(k => (
           <div key={k}>
             <div className="muted uppercase tracking-wider">{k}</div>
             <div className="mono mt-0.5">{underlyings[k].toFixed(2)}</div>

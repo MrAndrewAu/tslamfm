@@ -43,12 +43,15 @@ export interface CurrentSnapshot {
     VIX: number
     NVDA_rotation: number
     ARKK_rotation: number
+    gas_affordability: number
+    recession_pricing: number
     events: number
     baseline: number
   }
   active_events: { name: string; start: string; label: string }[]
   underlyings: {
     TSLA: number; QQQ: number; DXY: number; VIX: number; NVDA: number; ARKK: number
+    RBOB: number; IEF: number; SHY: number
   }
 }
 
@@ -60,6 +63,13 @@ export interface Model {
   coefficients: Record<string, number>
   p_values: Record<string, number>
   residualizations: Record<string, Residualization>
+  rolling_stats?: Record<string, {
+    window: number
+    min_periods: number
+    log_mean_latest: number
+    log_std_latest: number
+    source: string
+  }>
   events: ModelEvent[]
   stats: ModelStats
   current: CurrentSnapshot

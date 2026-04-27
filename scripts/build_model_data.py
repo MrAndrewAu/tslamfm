@@ -1,9 +1,18 @@
 """
-Export v6-canonical TSLA multi-factor model coefficients + historical series
+Export v6.2-canonical TSLA multi-factor model coefficients + historical series
 to JSON files consumed by the React app.
 
-v6-canonical factors:
+v6.2-canonical factors (v6.1 + bond-curve recession-pricing factor):
   - log_QQQ, log_DXY, log_VIX (orthogonalized vs QQQ): NVDA_excess, ARKK_excess
+  - RBOB_zscore_52w: 52w rolling z-score of log(RBOB gasoline futures) -- gas-
+    affordability proxy. Promoted in v6.1 after gauntlet (+5.62pp OOS).
+  - curve_IEF_SHY_zscore_52w: 52w rolling z-score of log(IEF/SHY) -- bond-curve
+    shape, proxy for recession/rate-cut pricing. Promoted in v6.2 after gauntlet:
+      walk-forward OOS R^2 lift +4.88pp on top of v6.1; permutation null
+      p<0.002 (0/500); strict complement to RBOB (CURVE alone HURTS v6 by
+      -5.31pp; v6.1+CURVE = +4.88pp). Lift positive in ALL three OOS
+      sub-periods (2025-H1, 2025-H2, 2026-YTD) -- cleaner than RBOB's profile.
+      See AI_CONTEXT.md sec 10.13.
   - 8-week event dummies, kept if p<0.10 (backward selection)
 
 Outputs:
@@ -38,7 +47,8 @@ def residualize(target, base):
 print("Fetching weekly closes...")
 S = {k: wk(v) for k, v in {
     "TSLA": "TSLA", "QQQ": "QQQ", "DXY": "DX-Y.NYB", "VIX": "^VIX",
-    "NVDA": "NVDA", "ARKK": "ARKK"
+    "NVDA": "NVDA", "ARKK": "ARKK", "RBOB": "RB=F",
+    "IEF": "IEF", "SHY": "SHY",
 }.items()}
 df = pd.DataFrame(S).resample("W-FRI").last().ffill().dropna()
 print(f"  {len(df)} weekly observations, {df.index[0].date()} -> {df.index[-1].date()}")
@@ -55,6 +65,21 @@ nvda_a, nvda_b, nvda_resid = residualize(np.log(df["NVDA"]), f["log_QQQ"])
 arkk_a, arkk_b, arkk_resid = residualize(np.log(df["ARKK"]), f["log_QQQ"])
 f["NVDA_excess"] = nvda_resid
 f["ARKK_excess"] = arkk_resid
+
+# RBOB 52w rolling z-score (backward-only -- no lookahead). min_periods=20
+# matches the validated walk-forward gauntlet (+5.62pp OOS R^2 lift).
+log_rbob = np.log(df["RBOB"])
+rbob_mean_52 = log_rbob.rolling(window=52, min_periods=20).mean()
+rbob_std_52  = log_rbob.rolling(window=52, min_periods=20).std()
+f["RBOB_zscore_52w"] = (log_rbob - rbob_mean_52) / rbob_std_52
+
+# Bond-curve shape: log(IEF/SHY), 52w rolling z-score (backward-only).
+# Promoted in v6.2 after gauntlet (+4.88pp OOS R^2 lift on top of v6.1).
+# Negative beta: bull-flattening curve (rate-cut pricing) -> TSLA discount.
+curve_log = np.log(df["IEF"]) - np.log(df["SHY"])
+curve_mean_52 = curve_log.rolling(window=52, min_periods=20).mean()
+curve_std_52  = curve_log.rolling(window=52, min_periods=20).std()
+f["curve_IEF_SHY_zscore_52w"] = (curve_log - curve_mean_52) / curve_std_52
 
 # Events (8-week dummies)
 EVENT_DEFS = [
@@ -84,7 +109,8 @@ def has_variation(col):
 active_event_names = [n for n, _, _ in EVENT_DEFS if has_variation(f"E_{n}")]
 print(f"  events with variation in window: {len(active_event_names)} / {len(EVENT_DEFS)}")
 
-FORCED = ["log_QQQ", "log_DXY", "log_VIX", "NVDA_excess", "ARKK_excess"]
+FORCED = ["log_QQQ", "log_DXY", "log_VIX", "NVDA_excess", "ARKK_excess",
+          "RBOB_zscore_52w", "curve_IEF_SHY_zscore_52w"]
 ALL_EVENTS = [f"E_{n}" for n in active_event_names]
 
 def fit(frame, factors):
@@ -164,6 +190,8 @@ bucket_dollars = {
     "VIX":   dollars(contrib_log.get("log_VIX", 0)),
     "NVDA_rotation": dollars(contrib_log.get("NVDA_excess", 0)),
     "ARKK_rotation": dollars(contrib_log.get("ARKK_excess", 0)),
+    "gas_affordability": dollars(contrib_log.get("RBOB_zscore_52w", 0)),
+    "recession_pricing": dollars(contrib_log.get("curve_IEF_SHY_zscore_52w", 0)),
     "events": dollars(sum(v for k, v in contrib_log.items() if k.startswith("E_"))),
     "baseline": fair - sum([
         dollars(contrib_log.get("log_QQQ", 0)),
@@ -171,6 +199,8 @@ bucket_dollars = {
         dollars(contrib_log.get("log_VIX", 0)),
         dollars(contrib_log.get("NVDA_excess", 0)),
         dollars(contrib_log.get("ARKK_excess", 0)),
+        dollars(contrib_log.get("RBOB_zscore_52w", 0)),
+        dollars(contrib_log.get("curve_IEF_SHY_zscore_52w", 0)),
         dollars(sum(v for k, v in contrib_log.items() if k.startswith("E_"))),
     ]),
 }
@@ -194,7 +224,7 @@ for name, dt, label in EVENT_DEFS:
         active_events.append({"name": name, "start": dt, "label": label})
 
 model_obj = {
-    "version": "v6-canonical-4y",
+    "version": "v6.2-canonical-4y",
     "generated_at": pd.Timestamp.utcnow().isoformat(),
     "window": {
         "start": str(f.index[0].date()),
@@ -207,6 +237,20 @@ model_obj = {
     "residualizations": {
         "NVDA_excess": {"intercept": nvda_a, "beta_log_QQQ": nvda_b, "source": "log(NVDA)"},
         "ARKK_excess": {"intercept": arkk_a, "beta_log_QQQ": arkk_b, "source": "log(ARKK)"},
+    },
+    "rolling_stats": {
+        "RBOB_zscore_52w": {
+            "window": 52, "min_periods": 20,
+            "log_mean_latest": float(rbob_mean_52.iloc[-1]),
+            "log_std_latest":  float(rbob_std_52.iloc[-1]),
+            "source": "log(RBOB)",
+        },
+        "curve_IEF_SHY_zscore_52w": {
+            "window": 52, "min_periods": 20,
+            "log_mean_latest": float(curve_mean_52.iloc[-1]),
+            "log_std_latest":  float(curve_std_52.iloc[-1]),
+            "source": "log(IEF) - log(SHY)",
+        },
     },
     "events": [
         {"name": n, "start": dt, "label": lbl,
@@ -245,6 +289,9 @@ model_obj = {
             "VIX":  float(df["VIX"].iloc[-1]),
             "NVDA": float(df["NVDA"].iloc[-1]),
             "ARKK": float(df["ARKK"].iloc[-1]),
+            "RBOB": float(df["RBOB"].iloc[-1]),
+            "IEF":  float(df["IEF"].iloc[-1]),
+            "SHY":  float(df["SHY"].iloc[-1]),
         },
     },
 }
@@ -271,7 +318,7 @@ with open(OUT_DIR / "history.json", "w") as fh:
 print(f"Wrote {OUT_DIR / 'history.json'} ({len(history)} rows)")
 
 # Console summary
-print(f"\nv6-canonical | factors={len(factors)} | n={len(f)}")
+print(f"\nv6.2-canonical | factors={len(factors)} | n={len(f)}")
 print(f"  In-sample:  R²={m['r2']:.4f}  MAE={mae_in:.2f}%")
 print(f"  OOS:        R²={r2_oos:.4f}  MAE={mae_oos:.2f}%  Corr={corr_oos:.3f}")
 print(f"  Current:    TSLA=${actual_now:.2f}  Fair=${fair:.2f}  Gap={(actual_now/fair-1)*100:+.1f}%")
