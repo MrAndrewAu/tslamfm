@@ -84,6 +84,21 @@ export default function App() {
         isLive: true,
       }
     }
+    // If the last history row is a partial-week snapshot, use it for the gauge
+    // so today's close is reflected even without a live Lambda feed.
+    const lastRow = history[history.length - 1]
+    if (lastRow?.partial_week) {
+      return {
+        actual: lastRow.actual,
+        fair:   lastRow.fitted,
+        low:    lastRow.low_q  ?? lastRow.low,
+        high:   lastRow.high_q ?? lastRow.high,
+        contributions: model.current.contribution_dollars,
+        underlyings: model.current.underlyings,
+        asOf: lastRow.date,
+        isLive: false,
+      }
+    }
     return {
       actual: model.current.tsla_actual,
       fair:   model.current.tsla_fair,

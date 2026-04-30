@@ -95,6 +95,7 @@ export interface HistoryRow {
   sigma_t?: number
   low_q?: number
   high_q?: number
+  partial_week?: boolean
 }
 
 export interface LiveQuotes {

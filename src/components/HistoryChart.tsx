@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import {
   Area, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, ReferenceLine, ComposedChart, LineChart,
@@ -159,7 +159,27 @@ export default function HistoryChart({ history, model, snapshot }: Props) {
               <Area type="monotone" dataKey="bandHigh" stroke="#3b82f6" strokeWidth={1} strokeDasharray="4 3" strokeOpacity={0.5} fill="url(#bandFill)" />
               <Area type="monotone" dataKey="bandLow"  stroke="#3b82f6" strokeWidth={1} strokeDasharray="4 3" strokeOpacity={0.5} fill="#0b0e14" />
               <Line type="monotone" dataKey="fitted" stroke="#3b82f6" strokeWidth={2} dot={false} name="fair value" />
-              <Line type="monotone" dataKey="actual" stroke="#e2e8f0" strokeWidth={1.5} dot={false} name="actual" />
+              <Line
+                type="monotone"
+                dataKey="actual"
+                stroke="#e2e8f0"
+                strokeWidth={1.5}
+                name="actual"
+                dot={(props: any) => {
+                  if (!props.payload?.partial_week) return <React.Fragment key={props.key} />
+                  const { cx, cy } = props
+                  return (
+                    <circle
+                      key={props.key}
+                      cx={cx} cy={cy} r={5}
+                      fill="#0b0e14"
+                      stroke="#e2e8f0"
+                      strokeWidth={1.5}
+                      strokeDasharray="3 2"
+                    />
+                  )
+                }}
+              />
               {eventLines.map(e => (
                 <ReferenceLine
                   key={e.date} x={e.date} stroke="#7c869a" strokeDasharray="3 3"
@@ -176,6 +196,7 @@ export default function HistoryChart({ history, model, snapshot }: Props) {
         <span className="flex items-center gap-1.5"><span className="w-3 h-0.5" style={{ background: '#3b82f6' }} /> model fair</span>
         <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm" style={{ background: 'rgba(59,130,246,0.2)' }} /> predictive range</span>
         <span className="flex items-center gap-1.5"><span className="w-3 border-t border-dashed border-dim" /> events</span>
+        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full border border-slate-200/70" style={{ borderStyle: 'dashed' }} /> week-to-date</span>
       </div>
 
       <div className="mt-4 pt-3 border-t border-line/50 text-[11px] muted leading-relaxed">

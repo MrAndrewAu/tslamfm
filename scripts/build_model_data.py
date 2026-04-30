@@ -460,6 +460,86 @@ model_obj["stats"]["band_backtest_start"] = predictive_rows[0]["date"] if predic
 with open(OUT_DIR / "model.json", "w") as fh:
     json.dump(model_obj, fh, indent=2)
 
+# --------------------------------------------------------------------------
+# Append a "current week so far" row using today's daily close.
+# This makes the chart show the latest move even before the weekly bar closes.
+# We only add it when today's date is strictly after the last weekly row.
+# --------------------------------------------------------------------------
+try:
+    SYMS_DAILY = {"TSLA": "TSLA", "QQQ": "QQQ", "DXY": "DX-Y.NYB", "VIX": "^VIX",
+                  "NVDA": "NVDA", "ARKK": "ARKK", "RBOB": "RB=F", "IEF": "IEF", "SHY": "SHY"}
+    daily_raw = yf.download(
+        list(SYMS_DAILY.values()), period="5d", interval="1d",
+        progress=False, auto_adjust=False,
+    )
+    # Flatten multi-level columns if present
+    if isinstance(daily_raw.columns, pd.MultiIndex):
+        daily_raw.columns = ["_".join(c).strip() for c in daily_raw.columns]
+    # Build a simple {SYM: latest_close} dict
+    today_prices = {}
+    for sym, ticker in SYMS_DAILY.items():
+        col = f"Close_{ticker}"
+        if col not in daily_raw.columns:
+            # Try alternate column name format
+            col = next((c for c in daily_raw.columns if c.startswith("Close") and ticker in c), None)
+        if col and col in daily_raw.columns:
+            s = daily_raw[col].dropna()
+            if not s.empty:
+                today_prices[sym] = float(s.iloc[-1])
+    # Date of the daily quote
+    last_daily_idx = daily_raw.dropna(how="all").index
+    today_date = pd.Timestamp(last_daily_idx[-1]).normalize()
+
+    last_weekly_date = f.index[-1]
+    if len(today_prices) == len(SYMS_DAILY) and today_date > last_weekly_date:
+        # Compute features using today's prices + stored normalization stats
+        lq  = np.log(today_prices["QQQ"])
+        ld  = np.log(today_prices["DXY"])
+        lv  = np.log(today_prices["VIX"])
+        # NVDA / ARKK residualize against QQQ using stored coefficients
+        nvda_exc = np.log(today_prices["NVDA"]) - (nvda_a + nvda_b * lq)
+        arkk_exc = np.log(today_prices["ARKK"]) - (arkk_a + arkk_b * lq)
+        # RBOB z-score: use last weekly mean/std, plug in today's log(RBOB)
+        rbob_z = (np.log(today_prices["RBOB"]) - float(rbob_mean_52.iloc[-1])) / max(float(rbob_std_52.iloc[-1]), 1e-8)
+        # Curve z-score: same approach
+        curve_today = np.log(today_prices["IEF"]) - np.log(today_prices["SHY"])
+        curve_z = (curve_today - float(curve_mean_52.iloc[-1])) / max(float(curve_std_52.iloc[-1]), 1e-8)
+
+        feat_today = {
+            "log_QQQ": lq, "log_DXY": ld, "log_VIX": lv,
+            "NVDA_excess": nvda_exc, "ARKK_excess": arkk_exc,
+            "RBOB_zscore_52w": rbob_z, "curve_IEF_SHY_zscore_52w": curve_z,
+        }
+        # Add event dummies for today
+        for name, dt, _ in EVENT_DEFS:
+            d0 = pd.Timestamp(dt)
+            feat_today[f"E_{name}"] = 1 if d0 <= today_date < d0 + pd.Timedelta(weeks=8) else 0
+
+        # Apply full-sample model coefficients
+        lf_today = coef_map["Intercept"] + sum(coef_map.get(c, 0.0) * feat_today.get(c, 0.0) for c in factors)
+        fit_today = float(np.exp(lf_today))
+        actual_today = float(today_prices["TSLA"])
+
+        history.append({
+            "date": str(today_date.date()),
+            "actual": round(actual_today, 2),
+            "fitted": round(fit_today, 2),
+            "low":   round(fit_today * float(np.exp(-sigma_t_next)), 2),
+            "high":  round(fit_today * float(np.exp( sigma_t_next)), 2),
+            "sigma_t": round(sigma_t_next, 5),
+            "low_q":  round(fit_today * float(np.exp(q10_log_now)), 2),
+            "high_q": round(fit_today * float(np.exp(q90_log_now)), 2),
+            "partial_week": True,
+        })
+        print(f"  Appended partial-week row: {today_date.date()}  TSLA=${actual_today:.2f}  Fair=${fit_today:.2f}")
+    else:
+        if len(today_prices) < len(SYMS_DAILY):
+            print("  Skipping partial-week row: incomplete daily quotes")
+        else:
+            print(f"  Skipping partial-week row: today ({today_date.date()}) not after last weekly ({last_weekly_date.date()})")
+except Exception as exc:
+    print(f"  Warning: could not append partial-week row ({exc})")
+
 with open(OUT_DIR / "history.json", "w") as fh:
     json.dump(history, fh)
 print(f"Wrote {OUT_DIR / 'history.json'} ({len(history)} rows)")
