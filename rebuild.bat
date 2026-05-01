@@ -1,4 +1,5 @@
 @echo off
+:: DEPLOY_NONCE=20260501-1
 echo Rebuilding model data...
 python scripts/build_model_data.py
 if %errorlevel% neq 0 (
