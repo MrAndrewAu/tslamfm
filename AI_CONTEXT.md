@@ -394,6 +394,9 @@ re-testing if regimes change:
 - `walkforward_generic.py` (reusable single-factor walk-forward harness)
 - `walkforward_xlu_robustness.py` (header notes the rejection)
 - `walkforward_v6_audit.py` (leave-one-out audit confirming all v6 factors pay rent)
+- `analyze_forward_pe_signal.py` (forward P/E / EPS factors — all rejected)
+- `analyze_xlk_vs_qqq.py` (XLK as QQQ replacement — rejected)
+- `analyze_spy_vs_qqq.py` (SPY as QQQ replacement — rejected)
 
 Output CSVs:
 - `public/data/options_features.csv` (50 rows, Trial-tier window)
@@ -640,6 +643,212 @@ catastrophic OOS drops despite huge in-sample lifts). The truly
 orthogonal candidate (XLU) survived farther but still failed robustness
 checks. **The branch is now definitively closed.** Next factor work
 should target macro / fundamentals / regime-switching, not equities.
+
+### 10.12 XLK as QQQ replacement — REJECTED (May 2026)
+
+**File:** `scripts/analyze_xlk_vs_qqq.py`.
+
+**Hypothesis:** XLK (Technology Select Sector SPDR, S&P 500 tech) is a
+tighter anchor for TSLA's AI/growth beta than QQQ (Nasdaq-100, ~60% tech).
+TSLA is NOT in XLK (Consumer Discretionary sector), eliminating self-
+inclusion feedback. Tested three structural variants.
+
+**Correlation check:**
+
+| pair | corr (log levels, n=209) |
+|---|---|
+| log_QQQ vs log_XLK | **0.997** |
+| log_TSLA vs log_QQQ | 0.696 |
+| log_TSLA vs log_XLK | 0.674 |
+| log_TSLA vs XLK_excess_vs_QQQ | −0.275 |
+
+R²(log_XLK ~ log_QQQ) = 0.994 → **VIF = 169.7** (near-perfect collinearity).
+
+**Walk-forward results:**
+
+| Variant | OOS R² | OOS MAE | Δ vs v6.4 | verdict |
+|---|---|---|---|---|
+| **v6.4 baseline** (QQQ anchor) | **0.733** | 6.86% | — | (ref) |
+| Var A: XLK drop-in (NVDA/ARKK still on QQQ) | 0.651 | 7.68% | **−8.24pp** | REJECT |
+| Var B: Full swap (XLK + NVDA/ARKK on XLK) | 0.679 | 7.95% | **−5.46pp** | REJECT |
+| Var C: Additive (QQQ + XLK both) | 0.702 | 7.56% | **−3.17pp** | REJECT |
+
+All three variants **degrade** OOS performance. Root causes:
+
+1. **Near-perfect collinearity.** VIF = 169.7. XLK and QQQ carry
+   essentially the same information for TSLA. The coefficient for XLK is
+   unstable across rolling windows (β swings from 0.009 to 1.944 as the
+   training window shrinks), confirming that the model cannot reliably
+   separate them.
+
+2. **NVDA_excess re-residualization backfires.** In Var B, NVDA_excess
+   (residualized on XLK) has p=0.772 in the full-sample fit — it becomes
+   insignificant because XLK already absorbs most of NVDA's AI-rotation
+   variance (XLK is heavily concentrated in NVDA + MSFT + AAPL). The
+   factor set loses an important dimension it had with the QQQ anchor.
+
+3. **XLK_excess_vs_QQQ is negatively correlated with TSLA (−0.27).**
+   The only unique signal XLK adds beyond QQQ is sectors that QQQ
+   underweights (pure-tech S&P names) — this is *negatively* correlated
+   with TSLA, which is Nasdaq/Consumer Discretionary, not pure-tech.
+   Substituting XLK forces an inferior fit.
+
+**Conclusion:** QQQ is the correct backbone. Its broader Nasdaq composition
+(which includes growth/AI names alongside pure tech) is a better match for
+TSLA's factor exposure than the S&P tech sector. **Do not re-propose XLK.**
+
+### 10.13 SPY as QQQ replacement — REJECTED (May 2026)
+
+**File:** `scripts/analyze_spy_vs_qqq.py`.
+
+**Hypothesis:** SPY (S&P 500 broad market) is a cleaner beta anchor than
+QQQ (Nasdaq-100) because it spans all sectors; the tech premium would then
+be fully absorbed by NVDA_excess and ARKK_excess residualized on SPY.
+
+**Correlation check:**
+
+| pair | corr (log levels, n=209) |
+|---|---|
+| log_QQQ vs log_SPY | **0.992** (VIF = 64.5) |
+| log_TSLA vs log_QQQ | 0.696 |
+| log_TSLA vs log_SPY | 0.701 |
+| log_TSLA vs SPY_excess_QQQ | **+0.089** |
+| log_TSLA vs QQQ_excess_SPY | **−0.002** |
+
+**Walk-forward results:**
+
+| Variant | OOS R² | OOS MAE | Δ vs v6.4 | verdict |
+|---|---|---|---|---|
+| **v6.4 baseline** (QQQ anchor) | **0.733** | 6.86% | — | (ref) |
+| Var A: SPY drop-in (NVDA/ARKK still on QQQ) | 0.741 | 7.00% | **+0.76pp** | REJECT |
+| Var B: Full swap (SPY + NVDA/ARKK on SPY) | 0.531 | 9.24% | **−20.25pp** | REJECT |
+| Var C: Additive (QQQ + SPY both) | 0.567 | 8.43% | **−16.65pp** | REJECT |
+
+**Why they all fail:**
+
+1. **The unique QQQ signal for TSLA is essentially zero (−0.002).**
+   The QQQ growth premium over SPY is not itself a driver of TSLA's
+   residual — meaning SPY and QQQ carry the same usable information
+   for TSLA's beta. A drop-in swap is harmless (Var A +0.76pp) but
+   doesn't clear the +2pp bar.
+
+2. **Var B is catastrophically destructive (−20.25pp).** When NVDA and
+   ARKK are residualized on SPY instead of QQQ, they absorb the entire
+   tech sector outperformance vs. the broad market. Their residuals
+   become much noisier and their coefficients collapse in stability —
+   the NVDA and ARKK factors lose their meaning as *tech-rotation*
+   signals and become hard-to-interpret residuals vs. everything.
+
+3. **VIF = 64.5.** High collinearity. Additive Var C shows the same
+   instability pattern as XLK's Var C — both are destructive.
+
+**Conclusion:** QQQ is marginally the better anchor. SPY's slightly higher
+raw correlation with TSLA is irrelevant once NVDA_excess and ARKK_excess
+are included — those factors already encode the tech-rotation story. The
+critical finding is that the Nasdaq growth premium (QQQ − SPY) carries
+*zero* unique predictive information for TSLA once the other factors
+are controlled for, confirming the current factor set is well-specified.
+**Do not re-propose SPY.**
+
+### 10.14 DIA (Dow Jones) as additive factor — REJECTED (May 2026)
+
+**Script:** `python scripts/walkforward_generic.py DIA <transform>`.
+
+**Hypothesis:** The Dow Jones Industrial Average captures old-economy /
+blue-chip rotation that is orthogonal to QQQ's Nasdaq-100 tilt, providing
+an independent market-regime signal for TSLA.
+
+**Walk-forward results (additive on top of v6.4):**
+
+| transform | VIF | In-sample R² | OOS R² | Δ vs v6.4 | verdict |
+|---|---|---|---|---|---|
+| `DIA_log` | 36.6 (HIGH) | +1.9pp | **−30.23pp** | 0.484 | REJECT |
+| `DIA_excess_vs_QQQ` | 2.0 (OK) | +1.9pp | **−30.23pp** | 0.484 | REJECT |
+| `DIA_zscore_52w` | 4.1 (OK) | +2.1pp | **−34.68pp** | 0.440 | REJECT |
+
+v6.4 baseline (this run): OOS R²=0.787, MAE=5.96%.
+
+`DIA_log` is unsurprisingly multicollinear (VIF=36.6) — DIA and QQQ
+move together. But the critical finding is `DIA_excess_vs_QQQ` (VIF=2.0,
+no multicollinearity flag) is **equally destructive at −30.23pp**. The
+old-economy rotation signal that DIA carries beyond QQQ is not a stable
+predictor of TSLA — it may have had some correlation in one sub-period
+but it collapses entirely out of sample. **Do not re-propose DIA.**
+
+### 10.15 Forward P/E / EPS factors — ALL REJECTED (May 2026)
+
+**File:** `scripts/analyze_forward_pe_signal.py`.
+
+**Motivation:** Published forward P/E is the most widely cited TSLA
+valuation metric. The thesis: when analysts raise NTM EPS estimates, the
+stock re-rates up on a delay; when they cut, it lags lower.
+
+**Critical leakage audit (mandatory — see §5 v7/v10 trap):**
+TSLA forward P/E = Price / NTM EPS. The ratio **contains the target
+variable** (TSLA price) → pure leakage if used as a regressor. Only the
+EPS side (analyst estimates, revisions, surprises) is admissible.
+
+**Data source:**
+- `yfinance earnings_dates` → single-quarter consensus EPS estimates +
+  actuals for 25 quarters (2020 → 2026). Available free, no auth.
+- NTM consensus EPS (hardcoded from public press): 12 data points in
+  the 4-year window.
+- SPX TTM EPS yield (proxy for market valuation regime): hardcoded from
+  S&P published data.
+
+**Candidates tested (n_q = quarterly change-points in 4yr window):**
+
+| factor | n_q | quarterly corr | p | WF lift | VIF | verdict |
+|---|---|---|---|---|---|---|
+| fwd_eps_estimate (NTM consensus $) | 11 | +0.164 | 0.629 | **+1.03pp** | 5.43 | REJECT |
+| eps_revision_qoq (QoQ NTM change) | 10 | +0.038 | 0.918 | **−13.91pp** | 3.36 | REJECT |
+| eps_revision_z (revision z-score) | 8 | +0.254 | 0.543 | **−7.34pp** | 3.07 | REJECT |
+| eps_surprise_z (PEAD beat/miss) | 12 | −0.224 | 0.484 | **−2.79pp** | 3.26 | REJECT |
+| eps_growth_yoy_z (TTM YoY growth) | 5 | +0.449 | 0.448 | n/a (79 rows) | 7.46 | REJECT |
+| mkt_earnings_yield_z (SPY EY macro) | 13 | −0.028 | 0.927 | **−30.47pp** | 2.46 | REJECT |
+
+v6.4 walk-forward baseline (over full WF window): R²=0.8651, MAE=6.09%.
+Note: this WF baseline spans the full 4-year window; the documented OOS
+R²=0.733 is restricted to 2025-01-03 onward (stricter). The relative Δ
+is what matters for rejection decisions.
+
+**Why they all fail:**
+
+1. **Data sparsity.** Quarterly data = ~12-16 change-points in the IS
+   window. Statistical tests at this n are effectively powerless — all
+   p-values are 0.44 – 0.93. Cannot distinguish signal from noise.
+
+2. **Multicollinearity with tech factors.** `fwd_eps_estimate` has
+   VIF=5.43 (R²=0.82 vs v6.4 factor set). When analysts raise TSLA EPS,
+   the market also rallies → QQQ, NVDA, ARKK already absorb this
+   rotation. The EPS estimate adds little orthogonal information.
+
+3. **Walk-forward destruction.** `eps_revision_qoq` (−13.91pp) and
+   `mkt_earnings_yield_z` (−30.47pp) are catastrophically destructive —
+   same magnitude as `off_exch_ratio_zscore` (§10.3) and `BTC_excess`
+   (§10.7). Confirms coefficient instability across rolling refits.
+
+4. **The PEAD story does not hold at weekly resolution.** EPS surprise
+   is −2.79pp — below the gate and destructive. Post-earnings drift is a
+   daily/intraday phenomenon; by Friday close the surprise is already
+   priced. Same washout as microstructure (§10.3).
+
+**`fwd_eps_estimate` is the closest call (+1.03pp)** but fails on three
+separate grounds: below the +2pp bar, HIGH multicollinearity (VIF=5.43),
+and the +1pp lifts likely arises from the NTM EPS series being a proxy
+for the pre-2024 valuation regime that ARKK/NVDA already represent.
+
+**Key lesson (new):** Fundamental factors with quarterly granularity
+face a structural ceiling at ~15 IS data points in a 4-year window. This
+is insufficient for parameter stability in a walk-forward refit that
+re-estimates 8–12 parameters at each step. Higher-quality fundamentals
+data (weekly analyst estimate revisions from Bloomberg/FactSet) *might*
+work but would require an expensive data subscription — and even then the
+multicollinearity with existing tech factors is the binding constraint.
+
+**Do not re-litigate.** Forward P/E, EPS estimates, EPS surprises, EPS
+growth, and market earnings yield are all answered. Update this doc
+instead of re-running unless regime materially shifts.
 
 ## 11. Other open items
 
