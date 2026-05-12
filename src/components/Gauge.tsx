@@ -10,7 +10,7 @@ interface Props {
 }
 
 /**
- * "Fair Value Gauge" — the hero component.
+ * "Next Week's Fair Value Gauge" — the hero component.
  *
  *   $actual                        $fair
  *      ●───────────────────────────○
@@ -39,7 +39,7 @@ export default function Gauge({ actual, fair, low, high, asOf, isLive }: Props) 
   return (
     <div className="panel p-6 md:p-8">
       <div className="flex items-baseline justify-between mb-4">
-        <div className="text-xs muted uppercase tracking-wider">Fair Value vs Market</div>
+        <div className="text-xs muted uppercase tracking-wider">Next Week's Fair Value vs Market</div>
         <div className="text-[11px] muted flex items-center gap-2">
           <span className={`inline-block w-1.5 h-1.5 rounded-full ${isLive ? 'bg-good animate-pulse' : 'bg-dim'}`} />
           {isLive ? 'live' : 'snapshot'} · {asOf}
@@ -52,10 +52,10 @@ export default function Gauge({ actual, fair, low, high, asOf, isLive }: Props) 
           <div className="text-4xl md:text-5xl mono font-semibold mt-1">{fmtUSD(actual)}</div>
         </div>
         <div className="text-right">
-          <div className="text-xs muted uppercase tracking-wider">Model fair value</div>
+          <div className="text-xs muted uppercase tracking-wider">Next Week's Fair Value</div>
           <div className="text-4xl md:text-5xl mono font-semibold mt-1" style={{ color: fairColor }}>{fmtUSD(fair)}</div>
           <div className="text-[11px] muted mt-1 mono">
-            10–90% range {fmtUSD(low, 0)} – {fmtUSD(high, 0)}
+            Next week's 10–90% range {fmtUSD(low, 0)} – {fmtUSD(high, 0)}
           </div>
         </div>
       </div>
@@ -105,7 +105,7 @@ export default function Gauge({ actual, fair, low, high, asOf, isLive }: Props) 
 
       <div className="mt-4 pt-3 border-t border-line/50 text-[11px] muted leading-relaxed">
         <span className="text-slate-300 font-semibold">How to read this.</span>{' '}
-        The 10–90% range is where, historically, ~80% of weekly closes have landed relative to the model. It is <span className="text-slate-300">not</span> a guarantee — about 1 week in 10 closes below the lower bound and 1 in 10 above the upper. The R² figures below describe how much of TSLA's <span className="text-slate-300">past variance</span> the model explained in-sample (88%) and out-of-sample (79%); they are <span className="text-slate-300">not</span> a probability that next week's price lands in the band. The model sees only QQQ, NVDA, ARKK, DXY, VIX, gasoline, the bond curve, and known catalyst windows — nothing about Musk, FSD, deliveries, or anything else.
+        Next week's 10–90% range is where, historically, most one-week-ahead closes have landed relative to the model. It is <span className="text-slate-300">not</span> a guarantee — some weekly closes fall below the lower bound or above the upper. The R² figures below describe how much of TSLA's <span className="text-slate-300">past variance</span> the model explained in-sample and out-of-sample; they are <span className="text-slate-300">not</span> a probability that next week's price lands in the band. The model sees only QQQ, NVDA, ARKK, DXY, VIX, gasoline, the bond curve, and known catalyst windows — nothing about Musk, FSD, deliveries, or anything else.
       </div>
     </div>
   )

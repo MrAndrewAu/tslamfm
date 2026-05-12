@@ -418,6 +418,7 @@ re-testing if regimes change:
 - `_tmp_xly_robustness.py` (XLY circularity check — TSLA self-reference confirmed)
 - `analyze_djt_signal.py` (DJT Trump Media — all transforms rejected, see §10.24)
 - `analyze_weight_tuning.py` (ridge-weight tuning over the v6.5 factor set — promoted to v6.6, see §10.25)
+- `_tmp_window_length_probe.py` (Aug-2022, 3.5y, 4.5y, and 8y historical window tests — boundary tweaks rejected, see §10.26)
 
 Output CSVs:
 - `public/data/options_features.csv` (50 rows, Trial-tier window)
@@ -1282,6 +1283,36 @@ This answers the visual concern: the headline improvement is not concentrated in
 - `model.json` now records the estimation metadata explicitly (`coefficient_method`, `coefficient_lambda`, and OLS reference for p-values)
 
 **Conclusion:** the factor set was already broadly right by v6.5; the remaining gain came from stabilizing the weights, not from adding more factors. **v6.6 is the new canonical production model.**
+
+### 10.26 Historical Window Length: Aug-2022 / 3.5y / 4.5y / 8y — REJECTED (May 2026)
+
+**File:** `scripts/_tmp_window_length_probe.py`.
+
+**Question:** Would moving the effective fit start from September 2022 back to the August 2022 SPY-bottom period, shrinking to roughly 3.5y, or extending to roughly 4.5y/8y improve v6.6?
+
+**Test design:** same v6.6 estimator and factor set; same OLS event selection; same standardized ridge final fit (`lambda=5.00`); same OOS start (`2025-01-03`). Only the data start date changed.
+
+| window | start | effective fit window | n | selected events | OOS R² | OOS MAE | OOS Corr |
+|---|---|---|---:|---|---:|---:|---:|
+| current 4y | 2022-04-26 | 2022-09-09 → 2026-05-08 | 192 | AI_day_2023, Trump_election, Tariff_shock, Robotaxi_Austin | **0.8330** | **5.66%** | **0.918** |
+| try Aug-2022 | 2022-03-26 | 2022-08-12 → 2026-05-08 | 196 | Twitter_close, AI_day_2023, Trump_election, Tariff_shock, Robotaxi_Austin | 0.8274 | 5.72% | 0.919 |
+| try 3.5y | 2022-11-12 | 2023-03-31 → 2026-05-08 | 163 | AI_day_2023, Trump_election, Tariff_shock, Robotaxi_Austin | 0.8475 | 5.85% | 0.921 |
+| try 4.5y | 2021-11-12 | 2022-03-25 → 2026-05-08 | 216 | Twitter_close, AI_day_2023, Trump_election, Tariff_shock, Robotaxi_Austin | 0.8238 | 5.82% | 0.917 |
+| try 8y | 2018-05-12 | 2018-09-28 → 2026-05-08 | 398 | Split_squeeze_2020, SP500_inclusion, Hertz_1T_peak, AI_day_2023, DOGE_brand_damage, Musk_exits_DOGE, Tariff_shock, Robotaxi_Austin | **−3.5114** | **24.53%** | **0.610** |
+
+**Delta:** Aug-2022 effective start loses −0.55pp OOS R², worsens MAE by +0.06pp, and only adds +0.001 Corr. 3.5y gains +1.46pp OOS R² and +0.003 Corr, but worsens MAE by +0.19pp and uses only 63 OOS predictions because the rolling-factor warmup starts later. 4.5y loses −0.92pp OOS R², worsens MAE by +0.16pp, and slightly lowers Corr. 8y is catastrophic: −434.43pp OOS R², +18.87pp MAE, −0.309 Corr.
+
+**Sub-period detail:**
+
+| period | current 4y R² / MAE / Corr | Aug-2022 R² / MAE / Corr | 3.5y R² / MAE / Corr | 4.5y R² / MAE / Corr | 8y R² / MAE / Corr | verdict |
+|---|---|---|---|---|---|---|
+| 2025 H1 | 0.780 / 6.52% / 0.888 | 0.780 / 6.60% / 0.890 | 0.548 / 6.94% / 0.743 | 0.784 / 6.73% / 0.895 | −1.549 / 23.33% / 0.808 | Aug-2022 no MAE lift; 8y fails |
+| 2025 H2 | 0.802 / 5.09% / 0.909 | 0.797 / 5.07% / 0.919 | 0.791 / 5.28% / 0.901 | 0.851 / 4.56% / 0.933 | 0.158 / 9.86% / 0.832 | mixed, not decisive |
+| 2026 YTD | **0.256 / 5.27% / 0.732** | **0.189 / 5.40% / 0.691** | **0.200 / 5.61% / 0.572** | **−0.169 / 6.31% / 0.555** | **−58.849 / 46.25% / −0.026** | current 4y best live tradeoff |
+
+**Interpretation:** the Aug-2022 effective start tests the user's SPY-bottom hypothesis cleanly, but the added August/early-September 2022 data causes `E_Twitter_close` to enter and slightly worsens the overall live tradeoff. The 3.5y shrink improves aggregate OOS R²/Corr slightly, but it does so while dropping early-2025 OOS coverage, worsening MAE, and weakening the newest 2026 YTD segment. The extra 4.5y history adds the 2022 Twitter-close regime and improves 2025 H2, but it materially degrades the newest 2026 YTD segment. The 8y window is much worse: it drags in pre-split, S&P 500 inclusion, Hertz/meme-stock, and early pandemic regimes whose TSLA behavior is structurally different from the current post-2022 macro/AI/robotaxi regime. That extra history overwhelms the live relationship even with standardized ridge shrinkage.
+
+**Conclusion: REJECT Aug-2022, 3.5y, 4.5y, and 8y windows.** Keep production at the current 4y start (`2022-04-26`) with dynamic extension to the latest completed Friday plus the partial-week daily row.
 
 ## 11. Other open items
 

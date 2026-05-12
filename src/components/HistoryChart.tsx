@@ -65,7 +65,7 @@ export default function HistoryChart({ history, model, snapshot }: Props) {
     <div className="panel p-6">
       {/* Headline summary — replaces the standalone Gauge panel */}
       <div className="flex items-baseline justify-between mb-3">
-        <div className="text-xs muted uppercase tracking-wider">Fair value vs market</div>
+        <div className="text-xs muted uppercase tracking-wider">Next Week's Fair Value vs Market</div>
         <div className="text-[11px] muted flex items-center gap-2">
           <span className={`inline-block w-1.5 h-1.5 rounded-full ${isLive ? 'bg-good animate-pulse' : 'bg-dim'}`} />
           {isLive ? 'live' : 'snapshot'} · {asOf}
@@ -78,7 +78,7 @@ export default function HistoryChart({ history, model, snapshot }: Props) {
           <div className="text-2xl mono font-semibold leading-none mt-1">{fmtUSD(actual)}</div>
         </div>
         <div>
-          <div className="text-[10px] muted uppercase tracking-wider">Fair value</div>
+          <div className="text-[10px] muted uppercase tracking-wider">Next Week's Fair Value</div>
           <div className="text-2xl mono font-semibold leading-none mt-1" style={{ color: fairColor }}>{fmtUSD(fair)}</div>
         </div>
         <div>
@@ -88,14 +88,14 @@ export default function HistoryChart({ history, model, snapshot }: Props) {
           </div>
         </div>
         <div>
-          <div className="text-[10px] muted uppercase tracking-wider">Predictive range</div>
+          <div className="text-[10px] muted uppercase tracking-wider">Next Week's Predictive Range</div>
           <div className="text-sm mono leading-none mt-1.5">{fmtUSD(low, 0)} – {fmtUSD(high, 0)}</div>
         </div>
       </div>
 
       <div className="flex items-center justify-between mb-3 pt-3 border-t border-line/50">
         <div className="text-[11px] muted">
-          Weekly: actual price vs model fair value, predictive range
+          Weekly: actual price vs next week's fair value and predictive range
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -158,7 +158,7 @@ export default function HistoryChart({ history, model, snapshot }: Props) {
               {/* Band: high (top) and low (bottom). Stack-style fill via two areas. */}
               <Area type="monotone" dataKey="bandHigh" stroke="#3b82f6" strokeWidth={1} strokeDasharray="4 3" strokeOpacity={0.5} fill="url(#bandFill)" />
               <Area type="monotone" dataKey="bandLow"  stroke="#3b82f6" strokeWidth={1} strokeDasharray="4 3" strokeOpacity={0.5} fill="#0b0e14" />
-              <Line type="monotone" dataKey="fitted" stroke="#3b82f6" strokeWidth={2} dot={false} name="fair value" />
+              <Line type="monotone" dataKey="fitted" stroke="#3b82f6" strokeWidth={2} dot={false} name="next week's fair value" />
               <Line
                 type="monotone"
                 dataKey="actual"
@@ -193,15 +193,15 @@ export default function HistoryChart({ history, model, snapshot }: Props) {
 
       <div className="flex items-center gap-4 mt-3 text-[11px] muted">
         <span className="flex items-center gap-1.5"><span className="w-3 h-0.5 bg-slate-200" /> actual</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-0.5" style={{ background: '#3b82f6' }} /> model fair</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm" style={{ background: 'rgba(59,130,246,0.2)' }} /> predictive range</span>
+        <span className="flex items-center gap-1.5"><span className="w-3 h-0.5" style={{ background: '#3b82f6' }} /> next week's fair</span>
+        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm" style={{ background: 'rgba(59,130,246,0.2)' }} /> next week's range</span>
         <span className="flex items-center gap-1.5"><span className="w-3 border-t border-dashed border-dim" /> events</span>
         <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full border border-slate-200/70" style={{ borderStyle: 'dashed' }} /> week-to-date</span>
       </div>
 
       <div className="mt-4 pt-3 border-t border-line/50 text-[11px] muted leading-relaxed">
         <span className="text-slate-300 font-semibold">How to read this.</span>{' '}
-        The blue line is the model's fair-value estimate; the shaded range is calibrated from <span className="text-slate-300">earlier one-step forecast errors</span>, not from a probability distribution assumed in advance.
+        The blue line is the model's next-week fair-value estimate; the shaded range is calibrated from <span className="text-slate-300">earlier one-step forecast errors</span>, not from a probability distribution assumed in advance.
         {coverageBacktest != null && coverageOos != null && bandBacktestStart ? (
           <> In backtest it contained <span className="text-slate-300">{fmtCoverage(coverageBacktest)}</span> of weeks since <span className="mono">{bandBacktestStart}</span>, and <span className="text-slate-300">{fmtCoverage(coverageOos)}</span> in the official OOS window since <span className="mono">{model.stats.oos.start}</span>.</>
         ) : null}

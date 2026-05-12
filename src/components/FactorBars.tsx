@@ -25,11 +25,11 @@ export default function FactorBars({ contributions, fair, underlyings }: Props) 
   return (
     <div className="panel p-6">
       <div className="flex items-baseline justify-between mb-1">
-        <div className="text-sm font-semibold">Why this fair value?</div>
+        <div className="text-sm font-semibold">Why this next week's fair value?</div>
         <div className="text-xs muted">contribution to {fmtUSD(fair, 0)}</div>
       </div>
       <div className="text-xs muted mb-5">
-        Each factor's marginal contribution to the model's current price prediction.
+        Each factor's marginal contribution to the model's next-week price prediction.
       </div>
 
       <div className="space-y-2">

@@ -52,7 +52,7 @@ export default function ModelStats({ stats, nWeeks }: Props) {
         <Stat
           label="σₜ (latest, EWMA)"
           value={(stats.sigma_t_latest ?? stats.sigma_resid_log).toFixed(3)}
-          help="Adaptive forecast-error sigma (EWMA, λ=0.94). Used to scale the predictive range so it tightens in calm regimes and widens after large surprises. Constant full-sample fit sigma is shown only as a reference."
+          help="Adaptive forecast-error sigma (EWMA, λ=0.94). Used to scale next week's predictive range so it tightens in calm regimes and widens after large surprises. Constant full-sample fit sigma is shown only as a reference."
         />
       </div>
     </div>
