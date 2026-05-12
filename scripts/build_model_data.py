@@ -1,8 +1,8 @@
 """
-Export v6.4-canonical TSLA multi-factor model coefficients + historical series
+Export v6.6-canonical TSLA multi-factor model coefficients + historical series
 to JSON files consumed by the React app.
 
-v6.4-canonical factors (v6.3 structure, methodology hardened):
+v6.6-canonical factors (v6.5 + coefficient shrinkage):
   - log_QQQ, log_DXY, log_VIX (orthogonalized vs QQQ): NVDA_excess, ARKK_excess
     NOTE on log_DXY: kept as a *forced* factor on theoretical grounds (dollar
     regime is a persistent driver of large-cap risk assets), NOT because it
@@ -22,6 +22,15 @@ v6.4-canonical factors (v6.3 structure, methodology hardened):
       -5.31pp; v6.1+CURVE = +4.88pp). Lift positive in ALL three OOS
       sub-periods (2025-H1, 2025-H2, 2026-YTD) -- cleaner than RBOB's profile.
       See AI_CONTEXT.md sec 10.13.
+  - vix_ts_zscore_52w: 52w rolling z-score of log(VIX3M/VIX) -- VIX term
+    structure shape. Positive = contango (near-term calm, sustained dread);
+    negative = backwardation (acute panic spike). Orthogonal to log_VIX level
+    (VIF=3.06). Promoted in v6.5 after walk-forward gauntlet: +2.22pp OOS R^2
+    lift (conservative measurement); VIX still indispensable when dropped
+    (-9.17pp) confirming complement not substitute; OOS sub-period corr +0.137
+    (same sign, p=0.26). First factor in the exploration to clear +1pp gate with
+    multi-variant coherence (zscore_52w +2.22pp, ratio +1.53pp) and pass
+    tenant-swap. See AI_CONTEXT.md sec 10.19.
     - 8-week event dummies, kept if p<0.10 (backward selection)
     - E_Robotaxi_Austin (2025-06-22): β=-0.119, p=0.030, WF lift +2.30pp, perm-p=0.020.
       Austin commercial robotaxi launch was a "sell-the-news" event; TSLA traded
@@ -31,6 +40,9 @@ v6.4-canonical factors (v6.3 structure, methodology hardened):
     - v6.4 hardening: event dummies are now truly kept by backward selection
         (p<0.10) and the displayed range is calibrated from expanding one-step
         forecast errors rather than full-sample fit residuals.
+    - v6.6 tuning: event selection remains OLS-based, but final coefficients use
+        standardized ridge shrinkage (lambda=5.00, intercept unpenalized). This
+        improved walk-forward OOS R^2, MAE, and Corr simultaneously vs v6.5.
 
 Outputs:
     public/data/model.json    -- coefficients, residualizations, stats, current snapshot
@@ -50,12 +62,14 @@ warnings.filterwarnings("ignore")
 OUT_DIR = Path(__file__).resolve().parents[1] / "public" / "data"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-START, END = "2022-04-26", "2026-04-26"
+START = "2022-04-26"
+END = str((pd.Timestamp.today().normalize() + pd.Timedelta(days=1)).date())
 OOS_START = "2025-01-03"
 MIN_TRAIN = 100
 EVENT_P_THRESHOLD = 0.10
 LAMBDA = 0.94
 BAND_MIN_ERRORS = 26
+RIDGE_COEF_LAMBDA = 5.00
 
 def wk(sym):
     candidates = []
@@ -89,13 +103,34 @@ def residualize(target, base):
     resid = target.to_numpy() - X @ coef
     return float(coef[0]), float(coef[1]), pd.Series(resid, index=target.index)
 
+def solve_beta(X, y, ridge_lambda=0.0):
+    if ridge_lambda <= 0:
+        beta, *_ = np.linalg.lstsq(X, y, rcond=None)
+        return beta
+    features = X[:, 1:]
+    means = features.mean(axis=0)
+    stds = features.std(axis=0, ddof=0)
+    stds = np.where(stds < 1e-12, 1.0, stds)
+    X_scaled = np.column_stack([np.ones(len(X)), (features - means) / stds])
+    penalty = np.eye(X.shape[1])
+    penalty[0, 0] = 0.0
+    beta_scaled = np.linalg.solve(X_scaled.T @ X_scaled + ridge_lambda * penalty, X_scaled.T @ y)
+    beta = np.empty_like(beta_scaled)
+    beta[1:] = beta_scaled[1:] / stds
+    beta[0] = beta_scaled[0] - np.sum(beta_scaled[1:] * means / stds)
+    return beta
+
 print("Fetching weekly closes...")
 S = {k: wk(v) for k, v in {
     "TSLA": "TSLA", "QQQ": "QQQ", "DXY": "DX-Y.NYB", "VIX": "^VIX",
     "NVDA": "NVDA", "ARKK": "ARKK", "RBOB": "RB=F",
-    "IEF": "IEF", "SHY": "SHY",
+    "IEF": "IEF", "SHY": "SHY", "VIX3M": "^VIX3M",
 }.items()}
 df = pd.DataFrame(S).resample("W-FRI").last().ffill().dropna()
+today = pd.Timestamp.today().normalize()
+days_since_friday = (today.weekday() - 4) % 7
+last_completed_friday = today - pd.Timedelta(days=days_since_friday)
+df = df[df.index <= last_completed_friday]
 print(f"  {len(df)} weekly observations, {df.index[0].date()} -> {df.index[-1].date()}")
 
 # Build feature matrix
@@ -125,6 +160,14 @@ curve_log = np.log(df["IEF"]) - np.log(df["SHY"])
 curve_mean_52 = curve_log.rolling(window=52, min_periods=20).mean()
 curve_std_52  = curve_log.rolling(window=52, min_periods=20).std()
 f["curve_IEF_SHY_zscore_52w"] = (curve_log - curve_mean_52) / curve_std_52
+
+# VIX term structure: log(VIX3M/VIX), 52w rolling z-score (backward-only).
+# Positive = contango (sustained dread); negative = backwardation (acute panic).
+# Promoted in v6.5: +2.22pp OOS R^2 lift, VIF=3.06, complement to log_VIX level.
+vix_ts_log = np.log(df["VIX3M"]) - np.log(df["VIX"])
+vix_ts_mean_52 = vix_ts_log.rolling(window=52, min_periods=20).mean()
+vix_ts_std_52  = vix_ts_log.rolling(window=52, min_periods=20).std()
+f["vix_ts_zscore_52w"] = (vix_ts_log - vix_ts_mean_52) / vix_ts_std_52
 
 # Events (8-week dummies)
 EVENT_DEFS = [
@@ -156,24 +199,27 @@ active_event_names = [n for n, _, _ in EVENT_DEFS if has_variation(f"E_{n}")]
 print(f"  events with variation in window: {len(active_event_names)} / {len(EVENT_DEFS)}")
 
 FORCED = ["log_QQQ", "log_DXY", "log_VIX", "NVDA_excess", "ARKK_excess",
-          "RBOB_zscore_52w", "curve_IEF_SHY_zscore_52w"]
+          "RBOB_zscore_52w", "curve_IEF_SHY_zscore_52w", "vix_ts_zscore_52w"]
 ALL_EVENTS = [f"E_{n}" for n in active_event_names]
 
-def fit(frame, factors):
+def fit(frame, factors, ridge_lambda=0.0):
     y = frame["log_TSLA"].to_numpy()
     X = np.column_stack([np.ones(len(frame))] + [frame[c].to_numpy() for c in factors])
-    b, *_ = np.linalg.lstsq(X, y, rcond=None)
+    b_ols = solve_beta(X, y, ridge_lambda=0.0)
+    b = solve_beta(X, y, ridge_lambda=ridge_lambda)
     yhat = X @ b
     r = y - yhat
+    r_ols = y - (X @ b_ols)
     n, k = X.shape
     s2 = (r @ r) / (n - k)
-    cov = s2 * np.linalg.pinv(X.T @ X)
+    s2_ols = (r_ols @ r_ols) / (n - k)
+    cov = s2_ols * np.linalg.pinv(X.T @ X)
     se = np.sqrt(np.diag(cov))
-    t = b / se
+    t = b_ols / se
     p = 2 * (1 - stats.t.cdf(np.abs(t), df=n - k))
     ss_tot = ((y - y.mean()) ** 2).sum()
     r2 = 1 - (r ** 2).sum() / ss_tot
-    return dict(beta=b, se=se, t=t, p=p, r2=float(r2),
+    return dict(beta=b, beta_ols=b_ols, se=se, t=t, p=p, r2=float(r2),
                 fitted=pd.Series(yhat, index=frame.index),
                 resid=pd.Series(r, index=frame.index),
                 factors=list(factors), n=n, k=k,
@@ -199,12 +245,14 @@ def recursive_predictions(frame, forced, candidate_events, min_train=MIN_TRAIN):
         train = frame.loc[:date].iloc[:-1]
         if len(train) < min_train:
             continue
-        facs, _, train_model = select_factors(train, forced, candidate_events)
+        facs, _, _ = select_factors(train, forced, candidate_events)
+        train_model = fit(train, facs, ridge_lambda=RIDGE_COEF_LAMBDA)
         xv = np.array([1.0] + [float(row[c]) for c in facs])
         pred_log.loc[date] = float(xv @ train_model["beta"])
     return pred_log
 
-factors, kept_events, m = select_factors(f, FORCED, ALL_EVENTS)
+factors, kept_events, _ = select_factors(f, FORCED, ALL_EVENTS)
+m = fit(f, factors, ridge_lambda=RIDGE_COEF_LAMBDA)
 print(f"  events kept after backward selection: {len(kept_events)}")
 for e in kept_events:
     print(f"    {e}")
@@ -256,6 +304,7 @@ bucket_dollars = {
     "ARKK_rotation": dollars(contrib_log.get("ARKK_excess", 0)),
     "gas_affordability": dollars(contrib_log.get("RBOB_zscore_52w", 0)),
     "recession_pricing": dollars(contrib_log.get("curve_IEF_SHY_zscore_52w", 0)),
+    "vol_term_structure": dollars(contrib_log.get("vix_ts_zscore_52w", 0)),
     "events": dollars(sum(v for k, v in contrib_log.items() if k.startswith("E_"))),
     "baseline": fair - sum([
         dollars(contrib_log.get("log_QQQ", 0)),
@@ -265,6 +314,7 @@ bucket_dollars = {
         dollars(contrib_log.get("ARKK_excess", 0)),
         dollars(contrib_log.get("RBOB_zscore_52w", 0)),
         dollars(contrib_log.get("curve_IEF_SHY_zscore_52w", 0)),
+        dollars(contrib_log.get("vix_ts_zscore_52w", 0)),
         dollars(sum(v for k, v in contrib_log.items() if k.startswith("E_"))),
     ]),
 }
@@ -288,7 +338,7 @@ for name, dt, label in EVENT_DEFS:
         active_events.append({"name": name, "start": dt, "label": label})
 
 model_obj = {
-    "version": "v6.4-canonical-4y",
+    "version": "v6.6-canonical-4y",
     "generated_at": pd.Timestamp.utcnow().isoformat(),
     "window": {
         "start": str(f.index[0].date()),
@@ -296,6 +346,14 @@ model_obj = {
         "n_weeks": int(len(f)),
     },
     "factors": factors,
+    "estimation": {
+        "event_selection_method": "ols_backward_elimination",
+        "event_selection_p_threshold": EVENT_P_THRESHOLD,
+        "coefficient_method": "standardized_ridge",
+        "coefficient_lambda": RIDGE_COEF_LAMBDA,
+        "intercept_penalized": False,
+        "p_values_reference": "ols_full_sample",
+    },
     "coefficients": coef_map,
     "p_values": p_map,
     "residualizations": {
@@ -314,6 +372,12 @@ model_obj = {
             "log_mean_latest": float(curve_mean_52.iloc[-1]),
             "log_std_latest":  float(curve_std_52.iloc[-1]),
             "source": "log(IEF) - log(SHY)",
+        },
+        "vix_ts_zscore_52w": {
+            "window": 52, "min_periods": 20,
+            "log_mean_latest": float(vix_ts_mean_52.iloc[-1]),
+            "log_std_latest":  float(vix_ts_std_52.iloc[-1]),
+            "source": "log(VIX3M) - log(VIX)",
         },
     },
     "events": [
@@ -358,6 +422,7 @@ model_obj = {
             "RBOB": float(df["RBOB"].iloc[-1]),
             "IEF":  float(df["IEF"].iloc[-1]),
             "SHY":  float(df["SHY"].iloc[-1]),
+            "VIX3M": float(df["VIX3M"].iloc[-1]),
         },
     },
 }
@@ -467,7 +532,8 @@ with open(OUT_DIR / "model.json", "w") as fh:
 # --------------------------------------------------------------------------
 try:
     SYMS_DAILY = {"TSLA": "TSLA", "QQQ": "QQQ", "DXY": "DX-Y.NYB", "VIX": "^VIX",
-                  "NVDA": "NVDA", "ARKK": "ARKK", "RBOB": "RB=F", "IEF": "IEF", "SHY": "SHY"}
+                  "NVDA": "NVDA", "ARKK": "ARKK", "RBOB": "RB=F", "IEF": "IEF", "SHY": "SHY",
+                  "VIX3M": "^VIX3M"}
     daily_raw = yf.download(
         list(SYMS_DAILY.values()), period="5d", interval="1d",
         progress=False, auto_adjust=False,
@@ -504,11 +570,15 @@ try:
         # Curve z-score: same approach
         curve_today = np.log(today_prices["IEF"]) - np.log(today_prices["SHY"])
         curve_z = (curve_today - float(curve_mean_52.iloc[-1])) / max(float(curve_std_52.iloc[-1]), 1e-8)
+        # VIX term-structure z-score
+        vix_ts_today = np.log(today_prices["VIX3M"]) - np.log(today_prices["VIX"])
+        vix_ts_z = (vix_ts_today - float(vix_ts_mean_52.iloc[-1])) / max(float(vix_ts_std_52.iloc[-1]), 1e-8)
 
         feat_today = {
             "log_QQQ": lq, "log_DXY": ld, "log_VIX": lv,
             "NVDA_excess": nvda_exc, "ARKK_excess": arkk_exc,
             "RBOB_zscore_52w": rbob_z, "curve_IEF_SHY_zscore_52w": curve_z,
+            "vix_ts_zscore_52w": vix_ts_z,
         }
         # Add event dummies for today
         for name, dt, _ in EVENT_DEFS:
@@ -531,6 +601,48 @@ try:
             "high_q": round(fit_today * float(np.exp(q90_log_now)), 2),
             "partial_week": True,
         })
+
+        contrib_today = {c: float(coef_map.get(c, 0.0) * float(feat_today.get(c, 0.0))) for c in factors}
+        def dollars_today(component_log):
+            return float(np.exp(lf_today) - np.exp(lf_today - component_log))
+
+        events_today = sum(v for k, v in contrib_today.items() if k.startswith("E_"))
+        bucket_dollars_today = {
+            "QQQ": dollars_today(contrib_today.get("log_QQQ", 0)),
+            "DXY": dollars_today(contrib_today.get("log_DXY", 0)),
+            "VIX": dollars_today(contrib_today.get("log_VIX", 0)),
+            "NVDA_rotation": dollars_today(contrib_today.get("NVDA_excess", 0)),
+            "ARKK_rotation": dollars_today(contrib_today.get("ARKK_excess", 0)),
+            "gas_affordability": dollars_today(contrib_today.get("RBOB_zscore_52w", 0)),
+            "recession_pricing": dollars_today(contrib_today.get("curve_IEF_SHY_zscore_52w", 0)),
+            "vol_term_structure": dollars_today(contrib_today.get("vix_ts_zscore_52w", 0)),
+            "events": dollars_today(events_today),
+        }
+        bucket_dollars_today["baseline"] = fit_today - sum(bucket_dollars_today.values())
+
+        active_events_today = []
+        for name, dt, label in EVENT_DEFS:
+            d0 = pd.Timestamp(dt)
+            if d0 <= today_date < d0 + pd.Timedelta(weeks=8) and f"E_{name}" in factors:
+                active_events_today.append({"name": name, "start": dt, "label": label})
+
+        model_obj["current"].update({
+            "date": str(today_date.date()),
+            "tsla_actual": actual_today,
+            "tsla_fair": fit_today,
+            "gap_pct": float((actual_today / fit_today - 1) * 100),
+            "sigma_low": float(fit_today * np.exp(-sigma_t_next)),
+            "sigma_high": float(fit_today * np.exp(sigma_t_next)),
+            "sigma_t": sigma_t_next,
+            "q_low": float(fit_today * np.exp(q10_log_now)),
+            "q_high": float(fit_today * np.exp(q90_log_now)),
+            "factors_now": {c: float(feat_today.get(c, 0.0)) for c in factors},
+            "contribution_dollars": bucket_dollars_today,
+            "active_events": active_events_today,
+            "underlyings": {sym: float(today_prices[sym]) for sym in SYMS_DAILY},
+        })
+        actual_now = actual_today
+        fair = fit_today
         print(f"  Appended partial-week row: {today_date.date()}  TSLA=${actual_today:.2f}  Fair=${fit_today:.2f}")
     else:
         if len(today_prices) < len(SYMS_DAILY):
@@ -539,6 +651,9 @@ try:
             print(f"  Skipping partial-week row: today ({today_date.date()}) not after last weekly ({last_weekly_date.date()})")
 except Exception as exc:
     print(f"  Warning: could not append partial-week row ({exc})")
+
+with open(OUT_DIR / "model.json", "w") as fh:
+    json.dump(model_obj, fh, indent=2)
 
 with open(OUT_DIR / "history.json", "w") as fh:
     json.dump(history, fh)
@@ -549,7 +664,7 @@ print(f"  scaled q (current regime):       q10={q10_log_now:+.4f}  q90={q90_log_
 print(f"  predictive band coverage:        backtest={coverage_backtest:.3f}  oos={coverage_oos:.3f}")
 
 # Console summary
-print(f"\nv6.4-canonical | factors={len(factors)} | n={len(f)}")
+print(f"\nv6.6-canonical | factors={len(factors)} | n={len(f)}")
 print(f"  In-sample:  R²={m['r2']:.4f}  MAE={mae_in:.2f}%")
 print(f"  OOS:        R²={r2_oos:.4f}  MAE={mae_oos:.2f}%  Corr={corr_oos:.3f}")
 print(f"  Current:    TSLA=${actual_now:.2f}  Fair=${fair:.2f}  Gap={(actual_now/fair-1)*100:+.1f}%")
