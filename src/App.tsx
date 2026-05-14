@@ -4,6 +4,7 @@ import { computeFairValue } from './lib/model'
 import { fetchLiveQuotes } from './lib/yahoo'
 import Header from './components/Header'
 import HistoryChart from './components/HistoryChart'
+import SignalGauge from './components/SignalGauge'
 import FactorBars from './components/FactorBars'
 import ModelStats from './components/ModelStats'
 import Methodology from './components/Methodology'
@@ -116,6 +117,8 @@ export default function App() {
       <Header modelVersion={model.version} generatedAt={model.generated_at} />
 
       <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-8 space-y-6">
+        <SignalGauge actual={snapshot.actual} fair={snapshot.fair} />
+
         <HistoryChart
           history={history}
           model={model}

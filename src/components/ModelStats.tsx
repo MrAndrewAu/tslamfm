@@ -14,11 +14,12 @@ function Stat({ label, value, help }: { label: string; value: string; help?: str
 export default function ModelStats({ stats, nWeeks }: Props) {
   return (
     <div className="panel p-6">
-      <div className="text-sm font-semibold mb-1">Honesty stats</div>
+      <div className="text-sm font-semibold mb-1">Model quality</div>
       <div className="text-xs muted mb-5">
-        In-sample tells you how well the model fits known data. Out-of-sample
-        (walk-forward, refit weekly from 2025-01-03) tells you how well it would
-        have predicted the unknown future. <span className="text-slate-300">These are goodness-of-fit numbers, not probabilities</span> — they describe explained variance, not the chance the price lands in the band.
+        These metrics establish how credible the fair value—and therefore the gap signal—is.
+        Out-of-sample (walk-forward from 2025-01-03) is the honest test: the model never saw
+        those prices during fitting.{' '}
+        <span className="text-slate-300">R² and MAE describe fit quality, not the probability that the signal fires correctly.</span>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
