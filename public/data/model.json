@@ -1,6 +1,6 @@
 {
   "version": "v6.6-canonical-4y",
-  "generated_at": "2026-05-23T04:07:15.384474+00:00",
+  "generated_at": "2026-05-27T09:47:38.752820+00:00",
   "window": {
     "start": "2022-09-09",
     "end": "2026-05-22",
@@ -29,44 +29,44 @@
     "p_values_reference": "ols_full_sample"
   },
   "coefficients": {
-    "Intercept": -7.6175864675423055,
-    "log_QQQ": 1.1839213413372411,
-    "log_DXY": 1.0508644541636176,
-    "log_VIX": 0.3777688805217173,
-    "NVDA_excess": -0.1227399738263919,
-    "ARKK_excess": 0.8873558751111961,
-    "RBOB_zscore_52w": -0.05548184840208624,
-    "curve_IEF_SHY_zscore_52w": -0.06515063384163762,
-    "vix_ts_zscore_52w": 0.05643582634165896,
-    "E_Twitter_close": -0.07761971166452404,
-    "E_AI_day_2023": 0.20567747927891802,
-    "E_Tariff_shock": 0.1534818205824747,
-    "E_Robotaxi_Austin": -0.13331167464273416
+    "Intercept": -7.611941941164092,
+    "log_QQQ": 1.1841963035989918,
+    "log_DXY": 1.0492364924770674,
+    "log_VIX": 0.3778523304606031,
+    "NVDA_excess": -0.12392732475739009,
+    "ARKK_excess": 0.8859381524660468,
+    "RBOB_zscore_52w": -0.0554865205628582,
+    "curve_IEF_SHY_zscore_52w": -0.0652236827273415,
+    "vix_ts_zscore_52w": 0.05644927700049797,
+    "E_Twitter_close": -0.07760212537199875,
+    "E_AI_day_2023": 0.2056657025181114,
+    "E_Tariff_shock": 0.15327376370321963,
+    "E_Robotaxi_Austin": -0.13324763025992575
   },
   "p_values": {
-    "Intercept": 7.587348844761976e-06,
+    "Intercept": 7.66853523570532e-06,
     "log_QQQ": 0.0,
-    "log_DXY": 0.0018952557575997453,
-    "log_VIX": 1.2878587085651816e-14,
-    "NVDA_excess": 0.48009421581648404,
-    "ARKK_excess": 4.6407322429331543e-14,
-    "RBOB_zscore_52w": 5.981437567470493e-12,
-    "curve_IEF_SHY_zscore_52w": 4.325263702753546e-09,
-    "vix_ts_zscore_52w": 3.060629572004814e-08,
-    "E_Twitter_close": 0.09911259949680651,
-    "E_AI_day_2023": 1.0145168924946546e-06,
-    "E_Tariff_shock": 0.0011144078192055762,
-    "E_Robotaxi_Austin": 0.0013631767318640353
+    "log_DXY": 0.0019216129782264613,
+    "log_VIX": 1.2656542480726785e-14,
+    "NVDA_excess": 0.4689286951812959,
+    "ARKK_excess": 5.129230373768223e-14,
+    "RBOB_zscore_52w": 5.732747609954458e-12,
+    "curve_IEF_SHY_zscore_52w": 4.166117895110233e-09,
+    "vix_ts_zscore_52w": 3.020663652542055e-08,
+    "E_Twitter_close": 0.09911428831883695,
+    "E_AI_day_2023": 1.0076544865178505e-06,
+    "E_Tariff_shock": 0.0011256082048407556,
+    "E_Robotaxi_Austin": 0.0013692710205299718
   },
   "residualizations": {
     "NVDA_excess": {
-      "intercept": -15.155296551156674,
-      "beta_log_QQQ": 3.202738747605895,
+      "intercept": -15.155295336119279,
+      "beta_log_QQQ": 3.2027385462436935,
       "source": "log(NVDA)"
     },
     "ARKK_excess": {
-      "intercept": -1.2024594738272671,
-      "beta_log_QQQ": 0.8479829034193572,
+      "intercept": -1.2024591557172608,
+      "beta_log_QQQ": 0.8479828509027225,
       "source": "log(ARKK)"
     }
   },
@@ -74,15 +74,15 @@
     "RBOB_zscore_52w": {
       "window": 52,
       "min_periods": 20,
-      "log_mean_latest": 0.7944707257404447,
-      "log_std_latest": 0.22907551713215582,
+      "log_mean_latest": 0.7950322894223889,
+      "log_std_latest": 0.23014817131765242,
       "source": "log(RBOB)"
     },
     "curve_IEF_SHY_zscore_52w": {
       "window": 52,
       "min_periods": 20,
-      "log_mean_latest": 0.1460666725323056,
-      "log_std_latest": 0.008250299444194156,
+      "log_mean_latest": 0.1460666792249631,
+      "log_std_latest": 0.00825031245250807,
       "source": "log(IEF) - log(SHY)"
     },
     "vix_ts_zscore_52w": {
@@ -136,8 +136,8 @@
       "label": "Twitter acquisition close",
       "weeks": 8,
       "in_model": true,
-      "beta": -0.07761971166452404,
-      "p_value": 0.09911259949680651
+      "beta": -0.07760212537199875,
+      "p_value": 0.09911428831883695
     },
     {
       "name": "AI_day_2023",
@@ -145,8 +145,8 @@
       "label": "AI Day 2 / Dojo narrative",
       "weeks": 8,
       "in_model": true,
-      "beta": 0.20567747927891802,
-      "p_value": 1.0145168924946546e-06
+      "beta": 0.2056657025181114,
+      "p_value": 1.0076544865178505e-06
     },
     {
       "name": "Trump_election",
@@ -190,8 +190,8 @@
       "label": "Tariff shock",
       "weeks": 8,
       "in_model": true,
-      "beta": 0.1534818205824747,
-      "p_value": 0.0011144078192055762
+      "beta": 0.15327376370321963,
+      "p_value": 0.0011256082048407556
     },
     {
       "name": "Robotaxi_Austin",
@@ -199,78 +199,78 @@
       "label": "Austin robotaxi sell-the-news",
       "weeks": 8,
       "in_model": true,
-      "beta": -0.13331167464273416,
-      "p_value": 0.0013631767318640353
+      "beta": -0.13324763025992575,
+      "p_value": 0.0013692710205299718
     }
   ],
   "stats": {
-    "r2_in": 0.8947209367317481,
-    "mae_in_pct": 8.334544119351186,
-    "sigma_resid_log": 0.11364426196570435,
+    "r2_in": 0.8947673124830117,
+    "mae_in_pct": 8.331628504503714,
+    "sigma_resid_log": 0.1136192288851007,
     "sigma_t_method": "EWMA_lambda_0.94_on_one_step_errors",
-    "sigma_t_latest": 0.06852224203653921,
+    "sigma_t_latest": 0.0680319827625671,
     "oos": {
-      "r2": 0.8229999019569504,
-      "mae_pct": 5.792432503576179,
-      "corr": 0.9157320153511878,
+      "r2": 0.8238017566546673,
+      "mae_pct": 5.783477969994048,
+      "corr": 0.9160021954986411,
       "start": "2025-01-03",
       "n": 73
     },
-    "q10_log": -0.0889513502458171,
-    "q90_log": 0.13133302082622242,
-    "sigma_IS_log": 0.08732165069617351,
+    "q10_log": -0.08782854383896108,
+    "q90_log": 0.13133316737306808,
+    "sigma_IS_log": 0.0872357565781698,
     "band_coverage_backtest": 0.8529411764705882,
     "band_coverage_oos": 0.8529411764705882,
     "band_backtest_start": "2025-02-07"
   },
   "current": {
-    "date": "2026-05-22",
-    "tsla_actual": 426.010009765625,
-    "tsla_fair": 457.3665334658408,
-    "gap_pct": -6.855885030022146,
-    "sigma_low": 427.07637866656194,
-    "sigma_high": 489.8050006597993,
+    "date": "2026-05-27",
+    "tsla_actual": 433.5899963378906,
+    "tsla_fair": 461.60813625769487,
+    "gap_pct": -6.069680692145118,
+    "sigma_low": 431.24844325007723,
+    "sigma_high": 494.1051377563771,
     "factors_now": {
-      "log_QQQ": 6.575828664586567,
-      "log_DXY": 4.598336894581859,
-      "log_VIX": 2.8154087651077058,
-      "NVDA_excess": -0.533192966910252,
-      "ARKK_excess": -0.03774809341237173,
-      "RBOB_zscore_52w": 1.8152617266806819,
-      "curve_IEF_SHY_zscore_52w": -1.4824863612782744,
-      "vix_ts_zscore_52w": 0.6057522694823559,
+      "log_QQQ": 6.5934280623626265,
+      "log_DXY": 4.595867020403641,
+      "log_VIX": 2.83203615392421,
+      "NVDA_excess": -0.5917442150152823,
+      "ARKK_excess": -0.04186674377913757,
+      "RBOB_zscore_52w": 1.4066678836075872,
+      "curve_IEF_SHY_zscore_52w": -1.0999040563008409,
+      "vix_ts_zscore_52w": 0.29356746593707683,
       "E_Twitter_close": 0.0,
       "E_AI_day_2023": 0.0,
       "E_Tariff_shock": 0.0,
       "E_Robotaxi_Austin": 0.0
     },
     "contribution_dollars": {
-      "QQQ": 457.1763524187231,
-      "DXY": 453.72189810878604,
-      "VIX": 299.47452721035916,
-      "NVDA_rotation": 28.973523762328796,
-      "ARKK_rotation": -15.579413289289903,
-      "gas_affordability": -48.46272979156197,
-      "recession_pricing": 42.10846199355626,
-      "vol_term_structure": 15.37135121285013,
+      "QQQ": 461.4204900190729,
+      "DXY": 457.8924441975998,
+      "VIX": 303.28709462844193,
+      "NVDA_rotation": 32.63981896370734,
+      "ARKK_rotation": -17.443162344806808,
+      "gas_affordability": -37.47238485836232,
+      "recession_pricing": 31.95571977521047,
+      "vol_term_structure": 7.586583457048732,
       "events": 0.0,
-      "baseline": -775.417438159911
+      "baseline": -778.258467580217
     },
     "active_events": [],
     "underlyings": {
-      "TSLA": 426.010009765625,
-      "QQQ": 717.5399780273438,
-      "DXY": 99.31900024414062,
-      "VIX": 16.700000762939453,
-      "NVDA": 215.3300018310547,
-      "ARKK": 76.4000015258789,
-      "RBOB": 3.3545000553131104,
-      "IEF": 93.87999725341797,
-      "SHY": 82.12000274658203,
-      "VIX3M": 20.030000686645508
+      "TSLA": 433.5899963378906,
+      "QQQ": 730.280029296875,
+      "DXY": 99.0739974975586,
+      "VIX": 16.979999542236328,
+      "NVDA": 214.86000061035156,
+      "ARKK": 77.2300033569336,
+      "RBOB": 3.0611000061035156,
+      "IEF": 94.27999877929688,
+      "SHY": 82.20999908447266,
+      "VIX3M": 19.889999389648438
     },
-    "sigma_t": 0.06852224203653921,
-    "q_low": 426.530564181255,
-    "q_high": 507.0165019845481
+    "sigma_t": 0.0680319827625671,
+    "q_low": 431.0491261238015,
+    "q_high": 511.392954201058
   }
 }
